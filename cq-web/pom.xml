@@ -11,6 +11,7 @@
     </parent>
     <artifactId>cq-web</artifactId>
     <packaging>jar</packaging>
+
     <dependencies>
         <!-- Web 功能，包含内置 Tomcat -->
         <dependency>
@@ -21,6 +22,12 @@
         <dependency>
             <groupId>com.cq</groupId>
             <artifactId>cq-common</artifactId>
+            <version>0.1.0-SNAPSHOT</version>
+        </dependency>
+        <!-- 新增：依赖 cq-repo 模块（解决当前报错） -->
+        <dependency>
+            <groupId>com.cq</groupId>
+            <artifactId>cq-repo</artifactId>
             <version>0.1.0-SNAPSHOT</version>
         </dependency>
     </dependencies>
