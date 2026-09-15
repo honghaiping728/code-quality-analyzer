@@ -11,4 +11,24 @@
     </parent>
     <artifactId>cq-parser</artifactId>
     <packaging>jar</packaging>
+
+    <dependencies>
+        <!-- 依赖公共模块（AST 摘要 Schema） -->
+        <dependency>
+            <groupId>com.cq</groupId>
+            <artifactId>cq-common</artifactId>
+            <version>0.1.0-SNAPSHOT</version>
+        </dependency>
+        <!-- JavaParser 核心依赖，版本由父 POM 统一管理 -->
+        <dependency>
+            <groupId>com.github.javaparser</groupId>
+            <artifactId>javaparser-core</artifactId>
+            <version>${javaparser.version}</version>
+        </dependency>
+        <!-- 日志 -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+    </dependencies>
 </project>
