@@ -190,6 +190,9 @@ async function pollTask(taskId, feedback) {
             await api(`/api/scan/tasks/${taskId}/report`, { method: 'POST' }).catch(() => null);
             await loadRecentTasks();
             await loadStatus();
+            // 先把列表聚焦到本次任务，再切视图（切视图会触发 loadIssues，
+            // 此时筛选条件已就位，展示的就是刚刚扫描出的结果）
+            await focusTask(taskId);
             switchView('issues');
             return;
         }
@@ -287,19 +290,46 @@ document.getElementById('snippetForm').addEventListener('submit', async (event) 
 
 /* ---------------- 问题列表 ---------------- */
 
-async function loadTaskOptions() {
+/**
+ * 刷新任务下拉选项
+ * @param {boolean} force 是否强制重建。首页初始化时只需拉一次，但扫描完成后
+ *   必须重建，否则新任务根本不会出现在下拉里，用户也就无法按任务筛选
+ */
+async function loadTaskOptions(force = false) {
     const select = document.getElementById('filterTask');
-    if (select.options.length > 1) return;
+    if (!force && select.options.length > 1) return;
     try {
         const tasks = await api('/api/scan/tasks?limit=50');
+        const previous = select.value;
+        while (select.options.length > 1) {
+            select.remove(1);   // 保留「全部」，其余重建
+        }
         for (const task of tasks) {
             const option = document.createElement('option');
             option.value = task.id;
             option.textContent = `#${task.id} ${task.targetPath} (${task.issueCount} 个问题)`;
             select.appendChild(option);
         }
+        select.value = previous;
     } catch (error) {
         // 任务列表拉取失败不影响问题查询
+    }
+}
+
+/**
+ * 把问题列表聚焦到指定任务
+ * <p>
+ * 扫描结束后必须做这一步：否则列表会展示**所有历史任务的合集**，按文件名排序，
+ * 刚扫描出的问题混在几十条旧记录里看不出来，用户会以为列表没有刷新。
+ * @param {number} taskId 任务 ID
+ */
+async function focusTask(taskId) {
+    await loadTaskOptions(true);
+    const select = document.getElementById('filterTask');
+    select.value = String(taskId);
+    // 任务已超出下拉上限时不强行筛选，退回「全部」以免出现空白列表
+    if (select.value !== String(taskId)) {
+        select.value = '';
     }
 }
 

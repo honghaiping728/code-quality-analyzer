@@ -89,7 +89,12 @@ Git 仓库接入 → 增量代码获取 → AST 解析 → 分析引擎 → 问�
 
 **当前工程基线**：Java 21 · Spring Boot 3.4.4 · Maven 多模块 · JavaParser 3.26.4 · JGit 6.10.0 · MyBatis-Plus 3.5.9 · MySQL 8.0
 
-**测试基线**：JUnit 5，规则引擎 79 个用例（每条规则配「正例命中 + 负例不误报」，负例是重点）
+**测试基线**：
+
+- 后端 JUnit 5 共 93 个用例 —— 42 条规则每条配「正例命中 + 负例不误报」（负例是重点）、
+  修复模板匹配、上传内容校验
+- 前端 `frontend-test/` 用 jsdom 驱动真实页面，覆盖单元测试触达不到的交互
+  （不含在 `mvn test` 中，需先启动服务再 `npm test`）
 
 ## 八、快速开始
 
@@ -112,8 +117,11 @@ docker exec -i mysql mysql -uroot -p123456 --default-character-set=utf8mb4 < doc
 # 全量构建（首次会下载依赖）
 mvn clean install
 
-# 运行测试（规则引擎 79 个用例）
+# 后端测试（93 个用例）
 mvn test
+
+# 前端集成测试（需先启动服务，见 frontend-test/README.md）
+# cd frontend-test && npm install && npm test
 
 # 启动 Web 服务，默认端口 8080
 mvn -pl cq-web spring-boot:run
