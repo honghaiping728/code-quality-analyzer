@@ -32,17 +32,52 @@
     <!-- ============ 概览 ============ -->
     <section class="view is-active" id="view-overview">
         <div class="panel">
-            <h2>发起扫描</h2>
-            <p class="hint">输入服务器上可访问的目录或单个 .java 文件路径。默认跳过 target、generated 目录。</p>
-            <form class="scan-form" id="scanForm">
-                <input type="text" id="scanPath" placeholder="/root/projects/code-quality-analyzer/cq-parser/src"
-                       autocomplete="off">
-                <select id="scanMode">
-                    <option value="FULL">全量扫描</option>
-                    <option value="INCREMENTAL">增量扫描</option>
-                </select>
-                <button type="submit" class="btn-primary" id="scanButton">开始扫描</button>
-            </form>
+            <h2>发起审查</h2>
+            <div class="source-tabs" id="sourceTabs">
+                <button type="button" class="source-tab is-active" data-source="path">服务器目录</button>
+                <button type="button" class="source-tab" data-source="upload">上传文件</button>
+                <button type="button" class="source-tab" data-source="snippet">粘贴代码</button>
+            </div>
+
+            <!-- 目录扫描 -->
+            <div class="source-pane is-active" id="pane-path">
+                <p class="hint">输入服务器上可访问的目录或单个 .java 文件路径。默认跳过 target、generated 目录。</p>
+                <form class="scan-form" id="scanForm">
+                    <input type="text" id="scanPath"
+                           placeholder="/root/projects/code-quality-analyzer/cq-parser/src"
+                           autocomplete="off">
+                    <select id="scanMode">
+                        <option value="FULL">全量扫描</option>
+                        <option value="INCREMENTAL">增量扫描</option>
+                    </select>
+                    <button type="submit" class="btn-primary" id="scanButton">开始扫描</button>
+                </form>
+            </div>
+
+            <!-- 上传本地文件 -->
+            <div class="source-pane" id="pane-upload">
+                <p class="hint">
+                    选择一个或多个 .java 文件。文件内容仅在内存中解析，不写入服务器磁盘，
+                    也不会按文件名做任何文件系统操作。
+                </p>
+                <form class="scan-form" id="uploadForm">
+                    <input type="file" id="uploadFiles" accept=".java" multiple>
+                    <button type="submit" class="btn-primary" id="uploadButton">上传并审查</button>
+                </form>
+            </div>
+
+            <!-- 粘贴代码 -->
+            <div class="source-pane" id="pane-snippet">
+                <p class="hint">直接粘贴 Java 代码，适合快速检查一段片段。</p>
+                <form class="snippet-form" id="snippetForm">
+                    <input type="text" id="snippetName" placeholder="文件名（可选），如 Demo.java"
+                           autocomplete="off">
+                    <textarea id="snippetSource" rows="12" spellcheck="false"
+                              placeholder="在此粘贴 Java 代码…"></textarea>
+                    <button type="submit" class="btn-primary" id="snippetButton">审查这段代码</button>
+                </form>
+            </div>
+
             <div class="scan-feedback" id="scanFeedback" hidden></div>
         </div>
 

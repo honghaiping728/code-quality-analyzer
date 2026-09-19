@@ -18,6 +18,11 @@ spring:
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai
+  servlet:
+    multipart:
+      # 上传的源码文件大小上限（单文件 / 整批请求）
+      max-file-size: 2MB
+      max-request-size: 20MB
 
 mybatis-plus:
   configuration:
@@ -30,14 +35,19 @@ mybatis-plus:
     banner: false
 
 # 大模型配置
-# 留空 api-key 时系统退化为离线启发式实现，「扫描 → 建议 → 报告」链路仍可完整运行；
-# 填入任意 OpenAI 兼容服务的密钥即可启用真实的语义分析与修复建议。
+# api-key 从环境变量 LLM_API_KEY 读取，**不要**把密钥写进本文件：
+# 本仓库是公开的，硬编码密钥会被直接提交并泄露。
+# 未设置该环境变量时系统退化为离线启发式实现，扫描、建议、报告链路仍可完整运行。
+#
+#   export LLM_API_KEY=sk-xxxx
+#   java -jar cq-web/target/cq-web-0.1.0-SNAPSHOT.jar
+#
 cq:
   llm:
-    base-url: https://api.deepseek.com/v1
-    api-key: ""
-    model: deepseek-chat
-    timeout-seconds: 60
+    base-url: ${LLM_BASE_URL:https://api.deepseek.com/v1}
+    api-key: ${LLM_API_KEY:}
+    model: ${LLM_MODEL:deepseek-chat}
+    timeout-seconds: ${LLM_TIMEOUT:60}
 
 logging:
   level:

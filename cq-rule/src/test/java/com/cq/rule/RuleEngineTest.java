@@ -75,6 +75,37 @@ class RuleEngineTest {
     }
 
     @Test
+    @DisplayName("BUG.PRINT_STACK_TRACE 定位到 printStackTrace 那一行而非 catch 头")
+    void printStackTraceReportsAtCallSite() {
+        // 定位在 catch 头会导致代码片段里匹配不到 printStackTrace，
+        // 下游依赖片段做确定性修复的模板就会失效，退化成调用大模型
+        String source = wrap("""
+                void f() {
+                    try { g(); }
+                    catch (Exception e) { e.printStackTrace(); }
+                }
+                void g() {}
+                """);
+        ParsedFile file = PARSER.parseDetailed(source);
+        Issue issue = ENGINE.analyze(file).stream()
+                .filter(i -> i.getRuleId().equals("BUG.PRINT_STACK_TRACE"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("未命中 BUG.PRINT_STACK_TRACE"));
+        assertTrue(issue.getCodeSnippet().contains("printStackTrace"),
+                "代码片段应包含 printStackTrace，实际为：" + issue.getCodeSnippet());
+        // 从源码里推出该调用实际所在行，避免写死行号
+        int expectedLine = 0;
+        String[] lines = source.split("\n");
+        for (int i = 0; i < lines.length; i++) {
+            if (lines[i].contains("printStackTrace")) {
+                expectedLine = i + 1;
+                break;
+            }
+        }
+        assertEquals(expectedLine, issue.getLine(), "应报告在 e.printStackTrace() 所在行");
+    }
+
+    @Test
     @DisplayName("BUG.RETURN_IN_FINALLY 命中 finally 中的 return")
     void returnInFinallyFires() {
         assertFires("BUG.RETURN_IN_FINALLY", """

@@ -121,30 +121,40 @@ public final class BugRules {
         public List<Issue> check(RuleContext ctx) {
             List<Issue> issues = new ArrayList<>();
             for (CatchClause clause : ctx.findAll(CatchClause.class)) {
-                String caught = clause.getParameter().getNameAsString();
-                if (!isOnlyPrintStackTrace(clause, caught)) {
+                MethodCallExpr printStackTrace = onlyPrintStackTrace(clause);
+                if (printStackTrace == null) {
                     continue;
                 }
-                issues.add(issue(ctx, clause,
+                // 报告在 printStackTrace 调用本身而非 catch 头：
+                // 前者才是真正要改的那一行，行号与代码片段都更准确，
+                // 下游的确定性修复模板也依赖片段里能匹配到该调用
+                issues.add(issue(ctx, printStackTrace,
                         "catch 块中仅调用 printStackTrace，异常信息不会进入日志系统",
                         "改用日志框架记录，例如 log.error(\"处理失败\", e)"));
             }
             return issues;
         }
 
-        private static boolean isOnlyPrintStackTrace(CatchClause clause, String caught) {
+        /**
+         * 若 catch 块中仅有一句 {@code e.printStackTrace()}，返回该调用节点，否则返回 null
+         */
+        private static MethodCallExpr onlyPrintStackTrace(CatchClause clause) {
+            String caught = clause.getParameter().getNameAsString();
             List<com.github.javaparser.ast.stmt.Statement> statements = clause.getBody().getStatements();
             if (statements.size() != 1 || !(statements.get(0) instanceof ExpressionStmt exprStmt)) {
-                return false;
+                return null;
             }
             if (!(exprStmt.getExpression() instanceof MethodCallExpr call)) {
-                return false;
+                return null;
             }
             if (!call.getNameAsString().equals("printStackTrace")) {
-                return false;
+                return null;
             }
             // 只认 e.printStackTrace()，避免把无关对象的同名方法算进来
-            return call.getScope().map(scope -> scope.toString().equals(caught)).orElse(false);
+            boolean onCaughtException = call.getScope()
+                    .map(scope -> scope.toString().equals(caught))
+                    .orElse(false);
+            return onCaughtException ? call : null;
         }
     }
 

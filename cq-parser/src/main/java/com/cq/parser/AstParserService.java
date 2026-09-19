@@ -129,7 +129,21 @@ public class AstParserService {
      * @return 完整解析结果
      */
     public ParsedFile parseDetailed(String sourceCode) {
-        return buildParsedFile(sourceCode, parseSource(Providers.provider(new StringReader(sourceCode))), null);
+        return parseDetailed(sourceCode, null);
+    }
+
+    /**
+     * 解析源码文本，并指定一个展示用路径
+     * <p>
+     * 用于「粘贴代码」「上传文件」这类没有真实磁盘路径的场景：给一份展示路径，
+     * 规则中的忽略 glob 匹配、问题定位与报告展示才能正常工作。
+     * @param sourceCode Java 源码
+     * @param displayPath 展示用路径，可为 null
+     * @return 完整解析结果
+     */
+    public ParsedFile parseDetailed(String sourceCode, String displayPath) {
+        return buildParsedFile(sourceCode,
+                parseSource(Providers.provider(new StringReader(sourceCode))), displayPath);
     }
 
     /**

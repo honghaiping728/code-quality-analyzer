@@ -202,6 +202,89 @@ async function pollTask(taskId, feedback) {
     flash(feedback, '扫描仍在进行，请稍后在任务列表中查看', true);
 }
 
+/* ---------------- 输入方式切换 ---------------- */
+
+document.getElementById('sourceTabs').addEventListener('click', (event) => {
+    const tab = event.target.closest('.source-tab');
+    if (!tab) return;
+    document.querySelectorAll('.source-tab').forEach((item) => {
+        item.classList.toggle('is-active', item === tab);
+    });
+    document.querySelectorAll('.source-pane').forEach((pane) => {
+        pane.classList.toggle('is-active', pane.id === `pane-${tab.dataset.source}`);
+    });
+    document.getElementById('scanFeedback').hidden = true;
+});
+
+/* ---------------- 上传本地文件 ---------------- */
+
+document.getElementById('uploadForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const input = document.getElementById('uploadFiles');
+    const button = document.getElementById('uploadButton');
+    const feedback = document.getElementById('scanFeedback');
+    if (!input.files || input.files.length === 0) {
+        flash(feedback, '请先选择要审查的 .java 文件', true);
+        return;
+    }
+    const form = new FormData();
+    for (const file of input.files) {
+        form.append('files', file);
+    }
+    button.disabled = true;
+    button.textContent = '上传中…';
+    flash(feedback, `已上传 ${input.files.length} 个文件，正在解析与检查…`);
+    try {
+        // 用 FormData 上传时不能手动设置 Content-Type，
+        // 否则会覆盖掉浏览器生成的 multipart boundary，服务端将无法解析
+        const response = await fetch('/api/scan/upload', { method: 'POST', body: form });
+        const body = await response.json();
+        if (body.code !== 200) {
+            throw new Error(body.message || '上传失败');
+        }
+        if (body.message && body.message !== 'success') {
+            flash(feedback, body.message);
+        }
+        input.value = '';
+        await pollTask(body.data.id, feedback);
+    } catch (error) {
+        flash(feedback, `上传失败：${error.message}`, true);
+    } finally {
+        button.disabled = false;
+        button.textContent = '上传并审查';
+    }
+});
+
+/* ---------------- 粘贴代码审查 ---------------- */
+
+document.getElementById('snippetForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = document.getElementById('snippetButton');
+    const feedback = document.getElementById('scanFeedback');
+    const source = document.getElementById('snippetSource').value;
+    if (!source.trim()) {
+        flash(feedback, '请先粘贴要审查的代码', true);
+        return;
+    }
+    button.disabled = true;
+    button.textContent = '审查中…';
+    try {
+        const task = await api('/api/scan/snippet', {
+            method: 'POST',
+            body: JSON.stringify({
+                fileName: document.getElementById('snippetName').value.trim(),
+                source,
+            }),
+        });
+        await pollTask(task.id, feedback);
+    } catch (error) {
+        flash(feedback, `审查失败：${error.message}`, true);
+    } finally {
+        button.disabled = false;
+        button.textContent = '审查这段代码';
+    }
+});
+
 /* ---------------- 问题列表 ---------------- */
 
 async function loadTaskOptions() {

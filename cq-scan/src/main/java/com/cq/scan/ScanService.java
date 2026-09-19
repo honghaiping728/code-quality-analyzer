@@ -76,6 +76,12 @@ public class ScanService {
 
     // ==================== 对外接口 ====================
 
+    /** 单次扫描最多接受的文件数，防止一次上传拖垮服务 */
+    public static final int MAX_UPLOAD_FILES = 50;
+
+    /** 单个源码单元的最大字符数 */
+    public static final int MAX_SOURCE_CHARS = 2 * 1024 * 1024;
+
     /**
      * 提交扫描任务并异步执行
      * @param targetPath 目标目录
@@ -84,8 +90,57 @@ public class ScanService {
      * @return 已创建的任务（状态为 PENDING 或 RUNNING），前端据此轮询进度
      */
     public ScanTask submit(String targetPath, String mode, Long repoId) {
+        return submitInternal(targetPath, mode, repoId, null);
+    }
+
+    /**
+     * 提交「上传文件 / 粘贴代码」类扫描
+     * <p>
+     * 与目录扫描共用同一条分析与落库链路，区别只在源码从哪来。上传与粘贴的内容
+     * **只存在于内存中**：不落盘、不按文件名做任何文件系统操作，因此不存在
+     * 路径穿越或磁盘写满的风险。
+     * @param displayName 任务展示名，如文件名或「粘贴的代码」
+     * @param mode UPLOAD | SNIPPET
+     * @param units 源码单元列表
+     * @return 已创建的任务
+     */
+    public ScanTask submitSources(String displayName, String mode, List<SourceUnit> units) {
+        validateUnits(units);
+        String safeName = (displayName == null || displayName.isBlank()) ? "未命名" : displayName.trim();
+        return submitInternal(safeName, mode, null, units);
+    }
+
+    /**
+     * 校验上传/粘贴的内容规模
+     * <p>
+     * 输入来自浏览器，必须有上限：单次请求携带的文件数、单个文件的体积都要卡住，
+     * 否则一次大上传就可能把服务拖垮。抽成独立方法以便脱离 Spring 容器单测。
+     * @param units 源码单元
+     * @throws IllegalArgumentException 内容为空或超出限制
+     */
+    static void validateUnits(List<SourceUnit> units) {
+        if (units == null || units.isEmpty()) {
+            throw new IllegalArgumentException("没有可分析的内容");
+        }
+        if (units.size() > MAX_UPLOAD_FILES) {
+            throw new IllegalArgumentException("一次最多分析 " + MAX_UPLOAD_FILES + " 个文件，当前 "
+                    + units.size() + " 个");
+        }
+        for (SourceUnit unit : units) {
+            if (unit.content() != null && unit.content().length() > MAX_SOURCE_CHARS) {
+                throw new IllegalArgumentException(unit.displayPath() + " 内容过大（超过 "
+                        + (MAX_SOURCE_CHARS / 1024 / 1024) + " MB）");
+            }
+        }
+    }
+
+    /**
+     * 创建任务并异步执行
+     * @param units 为 null 时按目录路径读取源码
+     */
+    private ScanTask submitInternal(String displayName, String mode, Long repoId, List<SourceUnit> units) {
         ScanTask task = new ScanTask();
-        task.setTargetPath(targetPath);
+        task.setTargetPath(displayName);
         task.setMode(mode == null ? "FULL" : mode);
         task.setRepoId(repoId);
         task.setTriggerType("MANUAL");
@@ -95,7 +150,11 @@ public class ScanService {
 
         executor.submit(() -> {
             try {
-                execute(task);
+                if (units == null) {
+                    execute(task);
+                } else {
+                    executeUnits(task, units);
+                }
             } catch (RuntimeException e) {
                 log.error("扫描任务 {} 执行失败", task.getId(), e);
             }
@@ -104,75 +163,125 @@ public class ScanService {
     }
 
     /**
-     * 同步执行扫描（测试与内部调用用）
+     * 同步执行目录扫描（测试与内部调用用）
      * @param task 已入库的任务
      * @return 执行完毕的任务
      */
     public ScanTask execute(ScanTask task) {
+        long startedAt = markRunning(task);
+        try {
+            RuleConfigSet config = currentConfig();
+            List<SourceUnit> units = readSourceUnits(task.getTargetPath(), config);
+            return analyzeUnits(task, units, config, startedAt);
+        } catch (Exception e) {
+            return markFailed(task, startedAt, e);
+        }
+    }
+
+    /**
+     * 同步执行源码单元扫描（上传 / 粘贴）
+     * @param task 已入库的任务
+     * @param units 源码单元
+     * @return 执行完毕的任务
+     */
+    public ScanTask executeUnits(ScanTask task, List<SourceUnit> units) {
+        long startedAt = markRunning(task);
+        try {
+            return analyzeUnits(task, units, currentConfig(), startedAt);
+        } catch (Exception e) {
+            return markFailed(task, startedAt, e);
+        }
+    }
+
+    /** 逐单元解析、检查、落库 */
+    private ScanTask analyzeUnits(ScanTask task, List<SourceUnit> units,
+                                  RuleConfigSet config, long startedAt) {
+        List<Issue> allIssues = new ArrayList<>();
+        int totalLines = 0;
+        int analyzed = 0;
+
+        for (SourceUnit unit : units) {
+            if (unit.isBlank()) {
+                continue;   // 空文件或空白粘贴，没有分析价值
+            }
+            ParsedFile parsed = parser.parseDetailed(unit.content(), unit.displayPath());
+            List<Issue> issues = engine.analyze(parsed, config);
+            for (Issue issue : issues) {
+                issue.setFilePath(unit.displayPath());
+                issue.setTaskId(null);
+            }
+            allIssues.addAll(issues);
+            int lineCount = countLines(parsed);
+            totalLines += lineCount;
+            analyzed++;
+
+            ScanFile scanFile = new ScanFile();
+            scanFile.setTaskId(task.getId());
+            scanFile.setFilePath(unit.displayPath());
+            scanFile.setLineCount(lineCount);
+            scanFile.setIssueCount(issues.size());
+            scanFile.setParsed(parsed.getSummary().isParsed());
+            if (!parsed.getSummary().isParsed()) {
+                scanFile.setParseError(String.join("; ", parsed.getSummary().getParseErrors()));
+            }
+            scanFileMapper.insert(scanFile);
+        }
+
+        persistIssues(task.getId(), allIssues);
+
+        task.setFileCount(analyzed);
+        task.setIssueCount(allIssues.size());
+        task.setStatus("SUCCESS");
+        long finishedAt = System.currentTimeMillis();
+        task.setEndTime(new Date(finishedAt));
+        task.setDurationMs(finishedAt - startedAt);
+        taskMapper.updateById(task);
+        log.info("扫描任务 {} 完成：{} 个文件，{} 行，{} 个问题，耗时 {}ms",
+                task.getId(), analyzed, totalLines, allIssues.size(), task.getDurationMs());
+        return task;
+    }
+
+    private RuleConfigSet currentConfig() {
+        return configProvider == null ? new RuleConfigSet() : configProvider.current();
+    }
+
+    private long markRunning(ScanTask task) {
         long startedAt = System.currentTimeMillis();
         task.setStatus("RUNNING");
         task.setStartTime(new Date(startedAt));
         taskMapper.updateById(task);
+        return startedAt;
+    }
 
-        try {
-            RuleConfigSet config = configProvider == null ? new RuleConfigSet() : configProvider.current();
-            List<Path> javaFiles = collectJavaFiles(task.getTargetPath(), config);
+    private ScanTask markFailed(ScanTask task, long startedAt, Exception e) {
+        log.error("扫描任务 {} 失败", task.getId(), e);
+        task.setStatus("FAILED");
+        task.setErrorMessage(e.getMessage());
+        long finishedAt = System.currentTimeMillis();
+        task.setEndTime(new Date(finishedAt));
+        task.setDurationMs(finishedAt - startedAt);
+        taskMapper.updateById(task);
+        return task;
+    }
 
-            List<Issue> allIssues = new ArrayList<>();
-            int totalLines = 0;
-            for (Path path : javaFiles) {
-                ParsedFile parsed;
-                try {
-                    parsed = parser.parseDetailed(path.toFile());
-                } catch (IOException e) {
-                    log.warn("文件读取失败，已跳过: {}", path, e);
-                    continue;
-                }
-                List<Issue> issues = engine.analyze(parsed, config);
-                String relative = relativize(task.getTargetPath(), path);
-                for (Issue issue : issues) {
-                    issue.setFilePath(relative);
-                    issue.setTaskId(null);
-                }
-                allIssues.addAll(issues);
-                totalLines += countLines(parsed);
-
-                ScanFile scanFile = new ScanFile();
-                scanFile.setTaskId(task.getId());
-                scanFile.setFilePath(relative);
-                scanFile.setLineCount(countLines(parsed));
-                scanFile.setIssueCount(issues.size());
-                scanFile.setParsed(parsed.getSummary().isParsed());
-                if (!parsed.getSummary().isParsed()) {
-                    scanFile.setParseError(String.join("; ",
-                            parsed.getSummary().getParseErrors()));
-                }
-                scanFileMapper.insert(scanFile);
+    /**
+     * 从目录读取源码单元
+     * @param targetPath 目录或单个文件
+     * @param config 规则配置，用于按忽略 glob 过滤
+     * @return 源码单元列表
+     */
+    private List<SourceUnit> readSourceUnits(String targetPath, RuleConfigSet config) throws IOException {
+        List<Path> javaFiles = collectJavaFiles(targetPath, config);
+        List<SourceUnit> units = new ArrayList<>(javaFiles.size());
+        for (Path path : javaFiles) {
+            try {
+                units.add(new SourceUnit(relativize(targetPath, path),
+                        java.nio.file.Files.readString(path)));
+            } catch (IOException e) {
+                log.warn("文件读取失败，已跳过: {}", path, e);
             }
-
-            persistIssues(task.getId(), allIssues);
-
-            task.setFileCount(javaFiles.size());
-            task.setIssueCount(allIssues.size());
-            task.setStatus("SUCCESS");
-            long finishedAt = System.currentTimeMillis();
-            task.setEndTime(new Date(finishedAt));
-            task.setDurationMs(finishedAt - startedAt);
-            taskMapper.updateById(task);
-            log.info("扫描任务 {} 完成：{} 个文件，{} 行，{} 个问题，耗时 {}ms",
-                    task.getId(), javaFiles.size(), totalLines, allIssues.size(), task.getDurationMs());
-            return task;
-
-        } catch (Exception e) {
-            log.error("扫描任务 {} 失败", task.getId(), e);
-            task.setStatus("FAILED");
-            task.setErrorMessage(e.getMessage());
-            long finishedAt = System.currentTimeMillis();
-            task.setEndTime(new Date(finishedAt));
-            task.setDurationMs(finishedAt - startedAt);
-            taskMapper.updateById(task);
-            return task;
         }
+        return units;
     }
 
     /**

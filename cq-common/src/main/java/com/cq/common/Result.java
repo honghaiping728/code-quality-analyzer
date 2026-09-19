@@ -22,6 +22,10 @@ public class Result<T> implements Serializable {
         return new Result<>(200, "success", data);
     }
 
+    public static <T> Result<T> success(T data, String message) {
+        return new Result<>(200, message, data);
+    }
+
     public static <T> Result<T> success() {
         return new Result<>(200, "success", null);
     }
