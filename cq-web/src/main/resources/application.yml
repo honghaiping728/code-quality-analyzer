@@ -4,3 +4,43 @@ server:
 spring:
   application:
     name: code-quality-analyzer
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # 连接参数均可用环境变量覆盖：本地开发直接用默认值跑，
+    # 部署时通过 DB_HOST / DB_PASSWORD 等注入，无需改动仓库文件
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:code_quality}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:123456}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 5000
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+
+mybatis-plus:
+  configuration:
+    # 数据库下划线列名 → Java 驼峰字段
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      # 主键使用数据库自增
+      id-type: auto
+    banner: false
+
+# 大模型配置
+# 留空 api-key 时系统退化为离线启发式实现，「扫描 → 建议 → 报告」链路仍可完整运行；
+# 填入任意 OpenAI 兼容服务的密钥即可启用真实的语义分析与修复建议。
+cq:
+  llm:
+    base-url: https://api.deepseek.com/v1
+    api-key: ""
+    model: deepseek-chat
+    timeout-seconds: 60
+
+logging:
+  level:
+    com.cq: INFO
+    # MyBatis-Plus 的 SQL 日志，排查时调成 DEBUG
+    com.cq.scan.mapper: INFO

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>智能代码质量分析与修复建议系统</title>
+    <link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<header class="masthead">
+    <div class="masthead-inner">
+        <h1>智能代码质量分析</h1>
+        <p class="subtitle">AST 精确定位 · 四维规则检查 · 大模型成因分析与修复建议</p>
+    </div>
+    <div class="system-status" id="systemStatus">
+        <span class="dot" id="statusDot"></span>
+        <span id="statusText">连接中…</span>
+    </div>
+</header>
+
+<nav class="tabs" id="tabs">
+    <button class="tab is-active" data-view="overview">概览</button>
+    <button class="tab" data-view="issues">问题列表</button>
+    <button class="tab" data-view="detail">问题详情</button>
+    <button class="tab" data-view="report">报告与趋势</button>
+    <button class="tab" data-view="rules">规则配置</button>
+</nav>
+
+<main>
+
+    <!-- ============ 概览 ============ -->
+    <section class="view is-active" id="view-overview">
+        <div class="panel">
+            <h2>发起扫描</h2>
+            <p class="hint">输入服务器上可访问的目录或单个 .java 文件路径。默认跳过 target、generated 目录。</p>
+            <form class="scan-form" id="scanForm">
+                <input type="text" id="scanPath" placeholder="/root/projects/code-quality-analyzer/cq-parser/src"
+                       autocomplete="off">
+                <select id="scanMode">
+                    <option value="FULL">全量扫描</option>
+                    <option value="INCREMENTAL">增量扫描</option>
+                </select>
+                <button type="submit" class="btn-primary" id="scanButton">开始扫描</button>
+            </form>
+            <div class="scan-feedback" id="scanFeedback" hidden></div>
+        </div>
+
+        <div class="panel">
+            <h2>规则库</h2>
+            <div class="metric-row" id="ruleMetrics"><span class="hint">加载中…</span></div>
+        </div>
+
+        <div class="panel">
+            <h2>最近扫描任务</h2>
+            <div id="recentTasks"><span class="hint">暂无扫描记录</span></div>
+        </div>
+    </section>
+
+    <!-- ============ 问题列表 ============ -->
+    <section class="view" id="view-issues">
+        <div class="panel">
+            <h2>筛选</h2>
+            <div class="filters">
+                <label>任务
+                    <select id="filterTask"><option value="">全部</option></select>
+                </label>
+                <label>维度
+                    <select id="filterType">
+                        <option value="">全部</option>
+                        <option value="BUG">Bug</option>
+                        <option value="SECURITY">安全</option>
+                        <option value="PERFORMANCE">性能</option>
+                        <option value="STYLE">规范</option>
+                    </select>
+                </label>
+                <label>严重级
+                    <select id="filterSeverity">
+                        <option value="">全部</option>
+                        <option value="BLOCKER">Blocker</option>
+                        <option value="CRITICAL">Critical</option>
+                        <option value="MAJOR">Major</option>
+                        <option value="MINOR">Minor</option>
+                    </select>
+                </label>
+                <button class="btn" id="applyFilter">应用</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>统计</h2>
+            <div class="metric-row" id="issueMetrics"><span class="hint">—</span></div>
+        </div>
+
+        <div class="panel">
+            <h2>问题清单 <span class="count" id="issueCount"></span></h2>
+            <div id="issueTable"><span class="hint">暂无数据，请先发起扫描</span></div>
+        </div>
+    </section>
+
+    <!-- ============ 问题详情 ============ -->
+    <section class="view" id="view-detail">
+        <div id="detailBody"><p class="hint">在问题列表中点击任意一行查看详情。</p></div>
+    </section>
+
+    <!-- ============ 报告与趋势 ============ -->
+    <section class="view" id="view-report">
+        <div class="panel">
+            <h2>质量趋势</h2>
+            <p class="hint">按任务时间倒序展示问题总数与四维分布。</p>
+            <div id="trendChart"><span class="hint">暂无报告数据</span></div>
+        </div>
+        <div class="panel">
+            <h2>报告明细</h2>
+            <div id="reportTable"><span class="hint">—</span></div>
+        </div>
+    </section>
+
+    <!-- ============ 规则配置 ============ -->
+    <section class="view" id="view-rules">
+        <div class="panel">
+            <h2>规则启停与阈值 <span class="count" id="ruleCount"></span></h2>
+            <p class="hint">关闭某条规则后，后续扫描不再执行它；调整后立即生效。</p>
+            <div id="ruleTable"><span class="hint">加载中…</span></div>
+        </div>
+
+        <div class="panel">
+            <h2>阈值参数</h2>
+            <div id="thresholdTable"><span class="hint">加载中…</span></div>
+        </div>
+
+        <div class="panel">
+            <h2>忽略列表</h2>
+            <p class="hint">按路径 glob 忽略整个文件，或按规则忽略特定行。被忽略的问题不会进入结果。</p>
+            <div id="ignoreTable"><span class="hint">加载中…</span></div>
+            <form class="scan-form" id="ignoreForm">
+                <input type="text" id="ignoreRule" placeholder="规则 ID（留空则忽略该路径下所有规则）">
+                <input type="text" id="ignorePattern" placeholder="路径 glob，如 **/test/**">
+                <input type="text" id="ignoreReason" placeholder="忽略原因">
+                <button type="submit" class="btn">添加</button>
+            </form>
+        </div>
+    </section>
+
+</main>
+
+<footer class="footer">
+    <span>基于大语言模型的智能代码质量分析与自动修复建议系统</span>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

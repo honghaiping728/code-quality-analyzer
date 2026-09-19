@@ -5,11 +5,9 @@ import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.diff.DiffFormatter;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Repository;
-import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 import org.eclipse.jgit.treewalk.AbstractTreeIterator;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
-import org.eclipse.jgit.util.io.DisabledOutputStream;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -55,8 +53,8 @@ public class GitService {
         try (Repository repository = new FileRepositoryBuilder().setGitDir(repoDir).build();
              Git git = new Git(repository)) {
 
-            ObjectId oldTreeId = repository.resolve(oldCommitId + "^{tree}");
-            ObjectId newTreeId = repository.resolve(newCommitId + "^{tree}");
+            ObjectId oldTreeId = resolveTree(repository, oldCommitId);
+            ObjectId newTreeId = resolveTree(repository, newCommitId);
 
             AbstractTreeIterator oldTreeIter = prepareTreeParser(repository, oldTreeId);
             AbstractTreeIterator newTreeIter = prepareTreeParser(repository, newTreeId);
@@ -87,6 +85,25 @@ public class GitService {
             }
         }
         return results;
+    }
+
+    /**
+     * 解析提交号对应的树对象
+     * <p>
+     * {@code repository.resolve()} 在提交号不存在时返回 null，若直接往下传递会在
+     * {@link #prepareTreeParser} 中抛出难以理解的 NPE。此处提前拦截并给出明确原因。
+     * @param repository 仓库
+     * @param commitId 提交号，可为 HEAD、HEAD~1、分支名或完整 SHA
+     * @return 树对象 ID
+     * @throws IllegalArgumentException 提交号不存在时
+     */
+    private ObjectId resolveTree(Repository repository, String commitId) throws Exception {
+        ObjectId treeId = repository.resolve(commitId + "^{tree}");
+        if (treeId == null) {
+            throw new IllegalArgumentException("提交不存在或无法解析: " + commitId
+                    + "（本地仓库: " + repository.getDirectory() + "）");
+        }
+        return treeId;
     }
 
     private AbstractTreeIterator prepareTreeParser(Repository repository, ObjectId treeId) throws Exception {

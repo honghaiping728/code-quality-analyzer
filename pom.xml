@@ -18,6 +18,9 @@
         <java.version>21</java.version>
         <javaparser.version>3.26.4</javaparser.version>
         <jgit.version>6.10.0.202406032230-r</jgit.version>
+        <!-- MyBatis-Plus：版本不在 Spring Boot 依赖管理中，需显式指定 -->
+        <mybatis-plus.version>3.5.9</mybatis-plus.version>
+        <!-- MySQL 驱动版本由 spring-boot-dependencies 统一管理，无需指定 -->
     </properties>
     <modules>
         <module>cq-common</module>

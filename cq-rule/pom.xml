@@ -11,4 +11,47 @@
     </parent>
     <artifactId>cq-rule</artifactId>
     <packaging>jar</packaging>
+
+    <dependencies>
+        <!-- 依赖公共模块（Issue 问题对象、规则配置 Schema） -->
+        <dependency>
+            <groupId>com.cq</groupId>
+            <artifactId>cq-common</artifactId>
+            <version>0.1.0-SNAPSHOT</version>
+        </dependency>
+        <!-- 依赖解析模块：规则需要 ParsedFile 中的原始 AST 与作用域工具 -->
+        <dependency>
+            <groupId>com.cq</groupId>
+            <artifactId>cq-parser</artifactId>
+            <version>0.1.0-SNAPSHOT</version>
+        </dependency>
+        <!-- 规则直接使用 JavaParser 节点类型做匹配 -->
+        <dependency>
+            <groupId>com.github.javaparser</groupId>
+            <artifactId>javaparser-core</artifactId>
+            <version>${javaparser.version}</version>
+        </dependency>
+        <!-- 日志 -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <!-- 单元测试（版本由 spring-boot-starter-parent 的 junit-bom 统一管理） -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- spring-boot-starter-parent 默认绑定旧版 surefire，需显式升级才能跑 JUnit 5 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.2</version>
+            </plugin>
+        </plugins>
+    </build>
 </project>

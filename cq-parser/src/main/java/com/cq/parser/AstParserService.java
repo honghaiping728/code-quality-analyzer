@@ -117,6 +117,43 @@ public class AstParserService {
         return buildSummary(parseSource(Providers.provider(file)), file.getPath());
     }
 
+    // ==================== 对外接口（携带原始 AST） ====================
+
+    /**
+     * 解析源码文本，同时返回结构化摘要与原始 AST
+     * <p>
+     * 与 {@link #parse(String)} 解析同一份代码，区别仅在于额外保留
+     * {@link CompilationUnit} 与源码原文，供需要细粒度事实的规则使用。
+     * 注意源码按 UTF-8 读取。
+     * @param sourceCode Java 源码
+     * @return 完整解析结果
+     */
+    public ParsedFile parseDetailed(String sourceCode) {
+        return buildParsedFile(sourceCode, parseSource(Providers.provider(new StringReader(sourceCode))), null);
+    }
+
+    /**
+     * 解析单个 Java 文件，同时返回结构化摘要与原始 AST
+     * <p>
+     * 源码以 UTF-8 读入后由此文本解析（而非交给 JavaParser 自行读取文件），
+     * 保证「被解析的代码」与「规则见到的源码原文、行内容哈希」完全一致。
+     * @param file 文件对象
+     * @return 完整解析结果
+     */
+    public ParsedFile parseDetailed(File file) throws IOException {
+        String source = Files.readString(file.toPath());
+        return buildParsedFile(source, parseSource(Providers.provider(new StringReader(source))), file.getPath());
+    }
+
+    private ParsedFile buildParsedFile(String source, ParseResult<CompilationUnit> result, String filePath) {
+        ParsedFile parsed = new ParsedFile();
+        parsed.setSummary(buildSummary(result, filePath));
+        parsed.setSource(source);
+        parsed.setFilePath(filePath);
+        parsed.setUnit(result.getResult().orElse(null));
+        return parsed;
+    }
+
     /**
      * 递归解析目录下的所有 .java 文件
      * <p>
@@ -149,7 +186,10 @@ public class AstParserService {
     private ParseResult<CompilationUnit> parseSource(Provider provider) {
         ParserConfiguration configuration = new ParserConfiguration()
                 .setLanguageLevel(LanguageLevel.JAVA_21)
-                .setAttributeComments(false);   // 不保留注释，减小 AST 体积
+                // 必须保留注释：关闭后 Node.getComment()/getJavadocComment()/getAllComments()
+                // 全部返回空（注释只在 CommentsInserter 中挂到节点上），会导致「缺 Javadoc」
+                // 规则无法实现，且「空 catch」无法区分 catch {} 与 catch { /* 有意忽略 */ }
+                .setAttributeComments(true);
         return new JavaParser(configuration).parse(ParseStart.COMPILATION_UNIT, provider);
     }
 
@@ -416,16 +456,7 @@ public class AstParserService {
      * 判断调用点是否直接位于指定方法内（跳过局部类、匿名类、枚举常量体等嵌套作用域）
      */
     private static boolean belongsToCallable(Node node, CallableDeclaration<?> owner) {
-        Node current = node.getParentNode().orElse(null);
-        while (current != null && current != owner) {
-            if (current instanceof TypeDeclaration
-                    || (current instanceof ObjectCreationExpr creation && creation.getAnonymousClassBody().isPresent())
-                    || (current instanceof EnumConstantDeclaration constant && !constant.getClassBody().isEmpty())) {
-                return false;
-            }
-            current = current.getParentNode().orElse(null);
-        }
-        return current == owner;
+        return AstScopeUtils.belongsToCallable(node, owner);
     }
 
     /**
