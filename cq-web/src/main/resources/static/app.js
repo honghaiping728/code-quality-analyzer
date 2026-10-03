@@ -48,7 +48,10 @@ function severityBadge(severity) {
 }
 
 function typeLabel(type) {
-    return `<span class="type">${esc(TYPE_LABELS[type] || type || '')}</span>`;
+    const value = esc(type || '');
+    // 色点只是辅助线索，维度名始终以文字呈现
+    return `<span class="type"><span class="type-dot type-dot-${value}"></span>`
+        + `${esc(TYPE_LABELS[type] || type || '')}</span>`;
 }
 
 function fmtTime(value) {
@@ -60,12 +63,39 @@ function fmtTime(value) {
         + `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-/** 简短提示条 */
+/** 简短提示条（有明确落点的场景，如扫描反馈） */
 function flash(element, message, isError = false) {
     element.hidden = false;
     element.textContent = message;
     element.style.borderLeftWidth = isError ? '6px' : '3px';
     element.style.borderLeftStyle = isError ? 'dashed' : 'solid';
+    element.style.borderLeftColor = isError ? 'var(--danger)' : 'var(--accent)';
+}
+
+/**
+ * 全局提示条：替换散落在各处的 alert()
+ * <p>
+ * alert 会阻塞页面且样式不可控；这里统一成右下角浮层，自动消失、可点击关闭。
+ * @param {string} message 提示文案
+ * @param {string} [kind] success | error | info（默认 info）
+ */
+function toast(message, kind = 'info') {
+    const stack = document.getElementById('toastStack');
+    if (!stack) {
+        return;
+    }
+    // 最多同时 3 条，避免连续操作时糊满屏幕
+    while (stack.children.length >= 3) {
+        stack.removeChild(stack.firstChild);
+    }
+    const item = document.createElement('div');
+    item.className = `toast toast-${kind}`;
+    item.textContent = message;
+    item.addEventListener('click', () => item.remove());
+    stack.appendChild(item);
+    // 错误信息需要更多阅读时间
+    const ttl = kind === 'error' ? 5000 : 3200;
+    setTimeout(() => item.remove(), ttl);
 }
 
 /* ---------------- 视图切换 ---------------- */
@@ -130,9 +160,9 @@ async function loadRecentTasks() {
             return;
         }
         const rows = tasks.map((task) => `
-            <tr>
+            <tr class="is-clickable" data-task-id="${task.id}" title="点击查看该任务的问题">
                 <td class="cell-line">#${task.id}</td>
-                <td class="cell-file">${esc(task.targetPath)}</td>
+                <td class="cell-file"><span class="clip" title="${esc(task.targetPath)}">${esc(task.targetPath)}</span></td>
                 <td><span class="badge">${esc(task.mode)}</span></td>
                 <td><span class="badge">${esc(task.status)}</span></td>
                 <td class="cell-line">${task.fileCount}</td>
@@ -141,13 +171,24 @@ async function loadRecentTasks() {
                 <td class="cell-line">${fmtTime(task.createTime)}</td>
             </tr>`).join('');
         container.innerHTML = `
-            <table>
-                <thead><tr>
-                    <th>ID</th><th>扫描路径</th><th>模式</th><th>状态</th>
-                    <th>文件</th><th>问题</th><th>耗时</th><th>创建时间</th>
-                </tr></thead>
-                <tbody>${rows}</tbody>
-            </table>`;
+            <div class="table-wrap">
+                <table>
+                    <thead><tr>
+                        <th>ID</th><th>扫描路径</th><th>模式</th><th>状态</th>
+                        <th>文件</th><th>问题</th><th>耗时</th><th>创建时间</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+        // 点最近任务直接跳到问题列表并按该任务过滤，省去手动选筛选条件
+        container.querySelectorAll('tr.is-clickable').forEach((row) => {
+            row.addEventListener('click', async () => {
+                await loadTaskOptions(true);
+                document.getElementById('filterTask').value = row.dataset.taskId;
+                issueState.page = 1;
+                switchView('issues');
+            });
+        });
     } catch (error) {
         container.innerHTML = `<p class="empty">加载失败：${esc(error.message)}</p>`;
     }
@@ -181,28 +222,54 @@ document.getElementById('scanForm').addEventListener('submit', async (event) => 
 
 /** 轮询任务直到结束，让用户看到进度而非干等 */
 async function pollTask(taskId, feedback) {
-    for (let attempt = 0; attempt < 120; attempt++) {
-        const task = await api(`/api/scan/tasks/${taskId}`);
-        if (task.status === 'SUCCESS') {
-            flash(feedback, `扫描完成：${task.fileCount} 个文件，发现 ${task.issueCount} 个问题，`
-                + `耗时 ${task.durationMs} ms`);
-            // 扫描结束后顺手生成报告，让报告页立刻有数据
-            await api(`/api/scan/tasks/${taskId}/report`, { method: 'POST' }).catch(() => null);
-            await loadRecentTasks();
-            await loadStatus();
-            // 先把列表聚焦到本次任务，再切视图（切视图会触发 loadIssues，
-            // 此时筛选条件已就位，展示的就是刚刚扫描出的结果）
-            await focusTask(taskId);
-            switchView('issues');
-            return;
+    const startedAt = Date.now();
+    startScanProgress('正在扫描…');
+    try {
+        for (let attempt = 0; attempt < 120; attempt++) {
+            const task = await api(`/api/scan/tasks/${taskId}`);
+            if (task.status === 'SUCCESS') {
+                flash(feedback, `扫描完成：${task.fileCount} 个文件，发现 ${task.issueCount} 个问题，`
+                    + `耗时 ${task.durationMs} ms`);
+                // 扫描结束后顺手生成报告，让报告页立刻有数据
+                await api(`/api/scan/tasks/${taskId}/report`, { method: 'POST' }).catch(() => null);
+                await loadRecentTasks();
+                await loadStatus();
+                // 先把列表聚焦到本次任务，再切视图（切视图会触发 loadIssues，
+                // 此时筛选条件已就位，展示的就是刚刚扫描出的结果）
+                await focusTask(taskId);
+                switchView('issues');
+                return;
+            }
+            if (task.status === 'FAILED') {
+                flash(feedback, `扫描失败：${task.errorMessage || '未知原因'}`, true);
+                return;
+            }
+            const seconds = Math.floor((Date.now() - startedAt) / 1000);
+            updateScanProgress(`正在扫描… 已用时 ${seconds} 秒 · 已扫描 ${task.fileCount ?? 0} 个文件`
+                + ` · 暂发现 ${task.issueCount ?? 0} 个问题`);
+            await new Promise((resolve) => setTimeout(resolve, 700));
         }
-        if (task.status === 'FAILED') {
-            flash(feedback, `扫描失败：${task.errorMessage || '未知原因'}`, true);
-            return;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 700));
+        flash(feedback, '扫描仍在进行，请稍后在任务列表中查看', true);
+    } finally {
+        // api() 抛错时也必须收起进度条，否则会留下一个永远转圈的假状态
+        stopScanProgress();
     }
-    flash(feedback, '扫描仍在进行，请稍后在任务列表中查看', true);
+}
+
+/** 扫描进度条：文案跟随既有 700ms 轮询更新，不额外起计时器 */
+function startScanProgress(text) {
+    document.getElementById('scanProgressText').textContent = text;
+    document.getElementById('scanProgress').hidden = false;
+    document.getElementById('statusDot').classList.add('is-busy');
+}
+
+function updateScanProgress(text) {
+    document.getElementById('scanProgressText').textContent = text;
+}
+
+function stopScanProgress() {
+    document.getElementById('scanProgress').hidden = true;
+    document.getElementById('statusDot').classList.remove('is-busy');
 }
 
 /* ---------------- 输入方式切换 ---------------- */
@@ -373,7 +440,22 @@ async function focusTask(taskId) {
     }
 }
 
-async function loadIssues() {
+/**
+ * 问题列表状态
+ * <p>
+ * 数据仍是一次请求取回（limit=1000，接口未变），关键词过滤与分页都在客户端完成——
+ * 后端没有 keyword 参数，也不值得为一个前端展示需求加接口。
+ */
+const issueState = { items: [], page: 1, pageSize: 20 };
+
+/** 最近一次查看的问题：返回列表时高亮该行（页码无需记录，切视图不会重置分页状态） */
+const lastIssuePage = { selectedId: null };
+
+/**
+ * 加载问题列表
+ * @param {boolean} [resetPage] 筛选条件变化时重置到第 1 页；单纯的视图切换保留当前页
+ */
+async function loadIssues(resetPage = false) {
     const container = document.getElementById('issueTable');
     const params = new URLSearchParams();
     const taskId = document.getElementById('filterTask').value;
@@ -384,38 +466,142 @@ async function loadIssues() {
     if (severity) params.set('severity', severity);
     params.set('limit', '1000');
 
+    if (resetPage) {
+        issueState.page = 1;
+    }
+    issueState.pageSize = Number(document.getElementById('pageSize').value) || 20;
+
     try {
         const issues = await api(`/api/issues?${params.toString()}`);
-        document.getElementById('issueCount').textContent = `共 ${issues.length} 条`;
-        renderIssueMetrics(issues);
-        if (!issues.length) {
-            container.innerHTML = '<p class="empty">没有符合条件的问题</p>';
-            return;
-        }
-        const rows = issues.map((issue) => `
-            <tr class="is-clickable" data-issue-id="${issue.id}">
-                <td>${severityBadge(issue.severity)}</td>
-                <td>${typeLabel(issue.type)}</td>
-                <td class="cell-file">${esc(issue.filePath)}</td>
-                <td class="cell-line">${issue.line}</td>
-                <td class="cell-rule">${esc(issue.ruleId)}</td>
-                <td>${esc(issue.message)}</td>
-                <td class="cell-line">${issue.confidence.toFixed(2)}</td>
-            </tr>`).join('');
-        container.innerHTML = `
+        issueState.items = applyIssueKeyword(issues);
+        renderIssueList();
+    } catch (error) {
+        container.innerHTML = `<p class="empty">加载失败：${esc(error.message)}</p>`;
+        document.getElementById('issuePagination').innerHTML = '';
+    }
+}
+
+/** 客户端关键词过滤：文件路径 / 问题描述 / 规则 ID */
+function applyIssueKeyword(issues) {
+    const keyword = document.getElementById('filterKeyword').value.trim().toLowerCase();
+    if (!keyword) {
+        return issues;
+    }
+    return issues.filter((issue) =>
+        (issue.filePath || '').toLowerCase().includes(keyword)
+        || (issue.message || '').toLowerCase().includes(keyword)
+        || (issue.ruleId || '').toLowerCase().includes(keyword));
+}
+
+function renderIssueList() {
+    const items = issueState.items;
+    document.getElementById('issueCount').textContent = `共 ${items.length} 条`;
+    // 统计基于过滤后的全集，而不是当前这一页
+    renderIssueMetrics(items);
+    renderIssueRows(items);
+    renderPagination(items.length);
+}
+
+function renderIssueRows(items) {
+    const container = document.getElementById('issueTable');
+    if (!items.length) {
+        container.innerHTML = '<p class="empty">没有符合条件的问题</p>';
+        return;
+    }
+    const size = issueState.pageSize;
+    const pages = Math.max(1, Math.ceil(items.length / size));
+    // 数据变少时把页码夹回有效范围，避免停在空页
+    issueState.page = Math.min(Math.max(1, issueState.page), pages);
+    const start = (issueState.page - 1) * size;
+    const rows = items.slice(start, start + size).map((issue) => `
+        <tr class="is-clickable${String(issue.id) === String(lastIssuePage.selectedId) ? ' is-selected' : ''}"
+            data-issue-id="${issue.id}">
+            <td>${severityBadge(issue.severity)}</td>
+            <td>${typeLabel(issue.type)}</td>
+            <td class="cell-file"><span class="clip" title="${esc(issue.filePath)}">${esc(issue.filePath)}</span></td>
+            <td class="cell-line">${issue.line}</td>
+            <td class="cell-rule">${esc(issue.ruleId)}</td>
+            <td class="cell-msg"><span class="clip" title="${esc(issue.message)}">${esc(issue.message)}</span></td>
+            <td class="cell-line">${Number(issue.confidence ?? 0).toFixed(2)}</td>
+        </tr>`).join('');
+    container.innerHTML = `
+        <div class="table-wrap">
             <table>
                 <thead><tr>
                     <th>严重级</th><th>维度</th><th>文件</th><th>行</th>
                     <th>规则</th><th>问题描述</th><th>置信度</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
-            </table>`;
-        container.querySelectorAll('tr.is-clickable').forEach((row) => {
-            row.addEventListener('click', () => openDetail(row.dataset.issueId));
-        });
-    } catch (error) {
-        container.innerHTML = `<p class="empty">加载失败：${esc(error.message)}</p>`;
+            </table>
+        </div>`;
+    container.querySelectorAll('tr.is-clickable').forEach((row) => {
+        row.addEventListener('click', () => openDetail(row.dataset.issueId));
+    });
+}
+
+/** 分页条：页码窗口最多 7 个，两端用省略号收拢 */
+function renderPagination(total) {
+    const pager = document.getElementById('issuePagination');
+    const size = issueState.pageSize;
+    const pages = Math.max(1, Math.ceil(total / size));
+    if (total <= size) {
+        pager.innerHTML = '';
+        return;
     }
+    const page = issueState.page;
+    const from = (page - 1) * size + 1;
+    const to = Math.min(page * size, total);
+    const parts = [
+        `<button type="button" data-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>上一页</button>`,
+    ];
+    for (const item of paginationWindow(page, pages)) {
+        if (item === '...') {
+            parts.push('<span>…</span>');
+        } else {
+            parts.push(`<button type="button" data-page="${item}"`
+                + ` class="${item === page ? 'is-current' : ''}">${item}</button>`);
+        }
+    }
+    parts.push(`<button type="button" data-page="${page + 1}" ${page >= pages ? 'disabled' : ''}>下一页</button>`);
+    parts.push(`<span class="pager-range">第 ${from}-${to} 条 · 共 ${total} 条</span>`);
+    pager.innerHTML = parts.join('');
+    pager.querySelectorAll('button[data-page]').forEach((button) => {
+        button.addEventListener('click', () => setIssuePage(Number(button.dataset.page)));
+    });
+}
+
+function paginationWindow(page, pages, span = 7) {
+    if (pages <= span) {
+        return Array.from({ length: pages }, (_, index) => index + 1);
+    }
+    const half = Math.floor(span / 2);
+    let start = Math.max(1, page - half);
+    let end = Math.min(pages, start + span - 1);
+    start = Math.max(1, end - span + 1);
+    const result = [];
+    if (start > 1) {
+        result.push(1);
+        if (start > 2) {
+            result.push('...');
+        }
+    }
+    for (let current = start; current <= end; current++) {
+        result.push(current);
+    }
+    if (end < pages) {
+        if (end < pages - 1) {
+            result.push('...');
+        }
+        result.push(pages);
+    }
+    return result;
+}
+
+function setIssuePage(page) {
+    issueState.page = page;
+    // 重建表格容器会自然把内部滚动条带回顶部
+    renderIssueRows(issueState.items);
+    renderPagination(issueState.items.length);
 }
 
 function renderIssueMetrics(issues) {
@@ -438,7 +624,19 @@ function renderIssueMetrics(issues) {
     document.getElementById('issueMetrics').innerHTML = cells.join('');
 }
 
-document.getElementById('applyFilter').addEventListener('click', loadIssues);
+document.getElementById('applyFilter').addEventListener('click', () => loadIssues(true));
+document.getElementById('filterKeyword').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        loadIssues(true);
+    }
+});
+// 换每页条数不需要重新拉数据，直接用已取回的集合重绘
+document.getElementById('pageSize').addEventListener('change', () => {
+    issueState.pageSize = Number(document.getElementById('pageSize').value) || 20;
+    issueState.page = 1;
+    renderIssueList();
+});
 
 /* ---------------- 问题详情 ---------------- */
 
@@ -446,6 +644,8 @@ let currentIssueId = null;
 
 async function openDetail(issueId) {
     currentIssueId = issueId;
+    // 记住点进来的是哪一行，返回列表时高亮它
+    lastIssuePage.selectedId = issueId;
     switchView('detail');
     const container = document.getElementById('detailBody');
     container.innerHTML = '<p class="hint">加载中…</p>';
@@ -458,6 +658,9 @@ async function openDetail(issueId) {
         container.innerHTML = `<p class="empty">加载失败：${esc(error.message)}</p>`;
     }
 }
+
+// 详情页返回：走 switchView 而不是 history.back()，避免依赖浏览器历史栈
+document.getElementById('detailBack').addEventListener('click', () => switchView('issues'));
 
 function renderDetail(issue, suggestion) {
     const snippet = issue.codeSnippet
@@ -558,7 +761,7 @@ function bindDetailActions(issue) {
                 }
                 await openDetail(issue.id);
             } catch (error) {
-                alert(`操作失败：${error.message}`);
+                toast(`操作失败：${error.message}`, 'error');
                 button.disabled = false;
             }
         });
@@ -595,10 +798,14 @@ async function loadReport() {
                 ['PERFORMANCE', report.performanceCount], ['STYLE', report.styleCount],
             ].map(([type, count]) => {
                 const share = total ? (count / total) * width : 0;
-                return `<span class="trend-seg trend-seg-${type}" style="width:${share}%"></span>`;
+                // 每段都带可读数值：颜色只是辅助，悬浮即可看到确切条数
+                const label = `${TYPE_LABELS[type]} ${count} 条 · 占比 ${total ? Math.round((count / total) * 100) : 0}%`;
+                return `<span class="trend-seg trend-seg-${type}" style="width:${share}%"
+                        title="${esc(label)}" data-tip="${esc(label)}"></span>`;
             }).join('');
             return `
-                <div class="trend-row">
+                <div class="trend-row"
+                     title="#${report.taskId} ${esc(fmtTime(report.createTime))} · 合计 ${total} 条">
                     <span class="trend-label" title="${esc(report.createTime || '')}">
                         #${report.taskId} ${esc((report.createTime || '').slice(5, 16))}</span>
                     <span class="trend-track">${segments}</span>
@@ -621,19 +828,45 @@ async function loadReport() {
                 <td class="cell-line">${fmtTime(report.createTime)}</td>
             </tr>`).join('');
         table.innerHTML = `
-            <table>
-                <thead><tr>
-                    <th>任务</th><th>文件</th><th>问题</th>
-                    <th>Bug/安全/性能/规范</th><th>B/C/M/m</th>
-                    <th>密度</th><th>修复率</th><th>时间</th>
-                </tr></thead>
-                <tbody>${rows}</tbody>
-            </table>`;
+            <div class="table-wrap">
+                <table>
+                    <thead><tr>
+                        <th>任务</th><th>文件</th><th>问题</th>
+                        <th>Bug/安全/性能/规范</th><th>B/C/M/m</th>
+                        <th>密度</th><th>修复率</th><th>时间</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
     } catch (error) {
         chart.innerHTML = `<p class="empty">加载失败：${esc(error.message)}</p>`;
         table.innerHTML = '';
     }
 }
+
+/**
+ * 趋势图悬浮提示
+ * <p>
+ * 段上已有 title（无 JS 也能看），这里再补一个跟随鼠标的浮层，读数更顺手。
+ * 事件委托绑在容器上，图表重新渲染后无需重新绑定。
+ */
+(function bindTrendTooltip() {
+    const chart = document.getElementById('trendChart');
+    const tip = document.getElementById('chartTip');
+    chart.addEventListener('mousemove', (event) => {
+        const segment = event.target.closest('.trend-seg');
+        if (!segment || !segment.dataset.tip) {
+            tip.hidden = true;
+            return;
+        }
+        const panel = chart.closest('.chart-panel').getBoundingClientRect();
+        tip.textContent = segment.dataset.tip;
+        tip.hidden = false;
+        tip.style.left = `${event.clientX - panel.left}px`;
+        tip.style.top = `${event.clientY - panel.top}px`;
+    });
+    chart.addEventListener('mouseleave', () => { tip.hidden = true; });
+})();
 
 /* ---------------- 规则配置 ---------------- */
 
@@ -659,11 +892,13 @@ async function loadRuleList() {
                 <td class="hint" style="margin:0">${esc(rule.description || '')}</td>
             </tr>`).join('');
         container.innerHTML = `
-            <table>
-                <thead><tr><th>状态</th><th>规则 ID</th><th>名称</th>
-                    <th>维度</th><th>默认严重级</th><th>置信度</th><th>说明</th></tr></thead>
-                <tbody>${rows}</tbody>
-            </table>`;
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>状态</th><th>规则 ID</th><th>名称</th>
+                        <th>维度</th><th>默认严重级</th><th>置信度</th><th>说明</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
         container.querySelectorAll('.toggle').forEach((button) => {
             button.addEventListener('click', async () => {
                 const enabled = button.dataset.enabled !== 'true';
@@ -675,7 +910,7 @@ async function loadRuleList() {
                     });
                     await loadRuleList();
                 } catch (error) {
-                    alert(`更新失败：${error.message}`);
+                    toast(`更新失败：${error.message}`, 'error');
                     button.disabled = false;
                 }
             });
@@ -697,10 +932,12 @@ async function loadThresholds() {
                 <td class="hint" style="margin:0">${esc(item.description || '')}</td>
             </tr>`).join('');
         container.innerHTML = `
-            <table>
-                <thead><tr><th>配置键</th><th>值</th><th>说明</th></tr></thead>
-                <tbody>${rows}</tbody>
-            </table>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>配置键</th><th>值</th><th>说明</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
             <div class="toolbar"><button class="btn-primary" id="saveThresholds">保存阈值</button></div>`;
         document.getElementById('saveThresholds').addEventListener('click', async () => {
             const inputs = document.querySelectorAll('.threshold-input');
@@ -711,9 +948,9 @@ async function loadThresholds() {
                         body: JSON.stringify({ value: input.value }),
                     });
                 }
-                alert('阈值已保存，下次扫描生效');
+                toast('阈值已保存，下次扫描生效', 'success');
             } catch (error) {
-                alert(`保存失败：${error.message}`);
+                toast(`保存失败：${error.message}`, 'error');
             }
         });
     } catch (error) {
@@ -732,22 +969,24 @@ async function loadIgnores() {
         const rows = ignores.map((entry) => `
             <tr>
                 <td class="cell-rule">${esc(entry.ruleId || '（全部规则）')}</td>
-                <td class="cell-file">${esc(entry.filePattern)}</td>
+                <td class="cell-file"><span class="clip" title="${esc(entry.filePattern)}">${esc(entry.filePattern)}</span></td>
                 <td class="hint" style="margin:0">${esc(entry.reason || '')}</td>
                 <td><button class="btn" data-ignore-id="${entry.id}">删除</button></td>
             </tr>`).join('');
         container.innerHTML = `
-            <table>
-                <thead><tr><th>规则</th><th>路径</th><th>原因</th><th></th></tr></thead>
-                <tbody>${rows}</tbody>
-            </table>`;
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>规则</th><th>路径</th><th>原因</th><th></th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
         container.querySelectorAll('[data-ignore-id]').forEach((button) => {
             button.addEventListener('click', async () => {
                 try {
                     await api(`/api/rules/ignores/${button.dataset.ignoreId}`, { method: 'DELETE' });
                     await loadIgnores();
                 } catch (error) {
-                    alert(`删除失败：${error.message}`);
+                    toast(`删除失败：${error.message}`, 'error');
                 }
             });
         });
@@ -770,7 +1009,7 @@ document.getElementById('ignoreForm').addEventListener('submit', async (event) =
         document.getElementById('ignoreForm').reset();
         await loadIgnores();
     } catch (error) {
-        alert(`添加失败：${error.message}`);
+        toast(`添加失败：${error.message}`, 'error');
     }
 });
 

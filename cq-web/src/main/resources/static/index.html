@@ -13,24 +13,30 @@
         <h1>智能代码质量分析</h1>
         <p class="subtitle">AST 精确定位 · 四维规则检查 · 大模型成因分析与修复建议</p>
     </div>
-    <div class="system-status" id="systemStatus">
-        <span class="dot" id="statusDot"></span>
-        <span id="statusText">连接中…</span>
-    </div>
 </header>
 
-<nav class="tabs" id="tabs">
-    <button class="tab is-active" data-view="overview">概览</button>
-    <button class="tab" data-view="issues">问题列表</button>
-    <button class="tab" data-view="detail">问题详情</button>
-    <button class="tab" data-view="report">报告与趋势</button>
-    <button class="tab" data-view="rules">规则配置</button>
-</nav>
+<!-- 吸顶条：页签与服务状态常驻顶部。状态元素只是从 masthead 搬进来，ID 未变 -->
+<div class="topbar" id="topbar">
+    <div class="topbar-inner shell">
+        <nav class="tabs" id="tabs">
+            <button class="tab is-active" data-view="overview">概览</button>
+            <button class="tab" data-view="issues">问题列表</button>
+            <button class="tab" data-view="detail">问题详情</button>
+            <button class="tab" data-view="report">报告与趋势</button>
+            <button class="tab" data-view="rules">规则配置</button>
+        </nav>
+        <div class="system-status" id="systemStatus">
+            <span class="dot" id="statusDot"></span>
+            <span id="statusText">连接中…</span>
+        </div>
+    </div>
+</div>
 
 <main>
 
     <!-- ============ 概览 ============ -->
     <section class="view is-active" id="view-overview">
+        <div class="overview-top">
         <div class="panel">
             <h2>发起审查</h2>
             <div class="source-tabs" id="sourceTabs">
@@ -107,12 +113,17 @@
             </div>
 
             <div class="scan-feedback" id="scanFeedback" hidden></div>
+            <div class="scan-progress" id="scanProgress" hidden>
+                <span class="spinner" aria-hidden="true"></span>
+                <span id="scanProgressText">正在扫描…</span>
+            </div>
         </div>
 
         <div class="panel">
             <h2>规则库</h2>
             <div class="metric-row" id="ruleMetrics"><span class="hint">加载中…</span></div>
         </div>
+        </div><!-- /.overview-top -->
 
         <div class="panel">
             <h2>最近扫描任务</h2>
@@ -125,6 +136,10 @@
         <div class="panel">
             <h2>筛选</h2>
             <div class="filters">
+                <label>关键词
+                    <input type="text" id="filterKeyword"
+                           placeholder="文件 / 描述 / 规则" autocomplete="off">
+                </label>
                 <label>任务
                     <select id="filterTask"><option value="">全部</option></select>
                 </label>
@@ -156,22 +171,37 @@
         </div>
 
         <div class="panel">
-            <h2>问题清单 <span class="count" id="issueCount"></span></h2>
+            <div class="panel-head">
+                <h2>问题清单 <span class="count" id="issueCount"></span></h2>
+                <label class="page-size-label">每页
+                    <select id="pageSize" class="page-size">
+                        <option value="20" selected>20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                        <option value="500">500</option>
+                    </select>
+                </label>
+            </div>
             <div id="issueTable"><span class="hint">暂无数据，请先发起扫描</span></div>
+            <div class="pager" id="issuePagination"></div>
         </div>
     </section>
 
     <!-- ============ 问题详情 ============ -->
     <section class="view" id="view-detail">
+        <div class="detail-bar">
+            <button type="button" class="btn" id="detailBack">← 返回问题列表</button>
+        </div>
         <div id="detailBody"><p class="hint">在问题列表中点击任意一行查看详情。</p></div>
     </section>
 
     <!-- ============ 报告与趋势 ============ -->
     <section class="view" id="view-report">
-        <div class="panel">
+        <div class="panel chart-panel">
             <h2>质量趋势</h2>
-            <p class="hint">按任务时间倒序展示问题总数与四维分布。</p>
+            <p class="hint">按任务时间倒序展示问题总数与四维分布；图表为主视图，下方「报告明细」表为等价的数值视图。</p>
             <div id="trendChart"><span class="hint">暂无报告数据</span></div>
+            <div class="chart-tip" id="chartTip" hidden></div>
         </div>
         <div class="panel">
             <h2>报告明细</h2>
@@ -210,6 +240,8 @@
 <footer class="footer">
     <span>基于大语言模型的智能代码质量分析与自动修复建议系统</span>
 </footer>
+
+<div class="toast-stack" id="toastStack" aria-live="polite"></div>
 
 <script src="app.js"></script>
 </body>
