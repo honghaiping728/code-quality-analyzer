@@ -43,6 +43,14 @@ mybatis-plus:
 #   java -jar cq-web/target/cq-web-0.1.0-SNAPSHOT.jar
 #
 cq:
+  repo:
+    # GitHub API token（可选）。留空为未认证访问，api.github.com 限流 60 次/小时；
+    # 配置 token 后提升为 5000 次/小时。**不要**把令牌写进本文件：本仓库是公开的。
+    github-token: ${CQ_GITHUB_TOKEN:}
+    # 单次仓库扫描允许的 .java 文件数上限，超出直接失败而不是静默截断
+    max-files: ${CQ_REPO_MAX_FILES:1000}
+    # 单次 API 请求的连接/读取超时（秒）
+    api-timeout-seconds: ${CQ_REPO_API_TIMEOUT:30}
   llm:
     base-url: ${LLM_BASE_URL:https://api.deepseek.com/v1}
     api-key: ${LLM_API_KEY:}

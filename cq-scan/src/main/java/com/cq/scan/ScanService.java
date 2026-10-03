@@ -2,20 +2,24 @@ package com.cq.scan;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.cq.common.Issue;
+import com.cq.common.model.Repo;
 import com.cq.common.model.RuleConfigProvider;
 import com.cq.common.model.RuleConfigSet;
 import com.cq.common.model.ScanFile;
 import com.cq.common.model.ScanTask;
 import com.cq.parser.AstParserService;
 import com.cq.parser.ParsedFile;
+import com.cq.repo.GitHubRepoClient;
 import com.cq.rule.RuleEngine;
 import com.cq.scan.mapper.IssueMapper;
+import com.cq.scan.mapper.RepoMapper;
 import com.cq.scan.mapper.ScanFileMapper;
 import com.cq.scan.mapper.ScanTaskMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -26,16 +30,23 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
+import java.util.TreeSet;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 /**
  * 扫描编排服务
  * <p>
- * 串联整条链路：遍历目标目录 → AST 解析 → 规则引擎检查 → 落库。
+ * 串联整条链路：读取源码（服务器目录 / 上传 / 粘贴 / GitHub 在线仓库四种来源）
+ * → AST 解析 → 规则引擎检查 → 落库。
  * 任务状态机为 PENDING → RUNNING → SUCCESS / FAILED，任一步骤抛异常都会把任务
  * 置为 FAILED 并记录原因，不会留下永远卡在 RUNNING 的僵尸任务。
+ * <p>
+ * 仓库扫描与其他来源共用同一分析链路，区别只在源码取自 GitHub 接口（不克隆、不落盘）。
  */
 @Service
 public class ScanService {
@@ -45,7 +56,10 @@ public class ScanService {
     private final ScanTaskMapper taskMapper;
     private final ScanFileMapper scanFileMapper;
     private final IssueMapper issueMapper;
+    private final RepoMapper repoMapper;
     private final RuleConfigProvider configProvider;
+    private final GitHubRepoClient githubClient;
+    private final int maxRepoFiles;
 
     private final AstParserService parser = new AstParserService();
     private final RuleEngine engine = new RuleEngine();
@@ -57,21 +71,37 @@ public class ScanService {
         return thread;
     });
 
+    /** 仓库源码正文的并发抓取池（raw 域请求，单独一个池避免占用扫描 worker） */
+    private final ExecutorService fetchPool = Executors.newFixedThreadPool(4, runnable -> {
+        Thread thread = new Thread(runnable, "cq-repo-fetcher");
+        thread.setDaemon(true);
+        return thread;
+    });
+
     /**
      * @param taskMapper 任务 Mapper
      * @param scanFileMapper 文件明细 Mapper
      * @param issueMapper 问题 Mapper
+     * @param repoMapper 仓库 Mapper（在线仓库扫描时登记/回填）
      * @param configProvider 规则配置来源；按 ObjectProvider 注入，
      *                       未提供时退化为内置默认规则集
+     * @param githubClient GitHub 在线读取客户端
+     * @param maxRepoFiles 单次仓库扫描允许的 .java 文件数上限（cq.repo.max-files）
      */
     public ScanService(ScanTaskMapper taskMapper,
                        ScanFileMapper scanFileMapper,
                        IssueMapper issueMapper,
-                       ObjectProvider<RuleConfigProvider> configProvider) {
+                       RepoMapper repoMapper,
+                       ObjectProvider<RuleConfigProvider> configProvider,
+                       GitHubRepoClient githubClient,
+                       @Value("${cq.repo.max-files:1000}") int maxRepoFiles) {
         this.taskMapper = taskMapper;
         this.scanFileMapper = scanFileMapper;
         this.issueMapper = issueMapper;
+        this.repoMapper = repoMapper;
         this.configProvider = configProvider.getIfAvailable();
+        this.githubClient = githubClient;
+        this.maxRepoFiles = maxRepoFiles;
     }
 
     // ==================== 对外接口 ====================
@@ -111,6 +141,34 @@ public class ScanService {
     }
 
     /**
+     * 提交 GitHub 仓库在线扫描任务（不克隆、不落盘）
+     * <p>
+     * 与目录扫描共用同一条分析与落库链路，区别只在源码从 GitHub 接口按需拉取到内存。
+     * 任务创建时按 URL 登记 repo 行并回填 repoId；扫描成功后把 head 提交写入
+     * repo.last_commit_id，作为下一次增量扫描的默认基线。
+     * @param spec 归一化后的仓库扫描请求
+     * @return 已创建的任务（状态为 PENDING），前端据此轮询进度
+     */
+    public ScanTask submitRepository(RepoScanSpec spec) {
+        GitHubRepoClient.RepoRef ref = GitHubRepoClient.parse(spec.url());
+        Repo repo = ensureRepo(spec.url(), ref.repo());
+
+        ScanTask task = new ScanTask();
+        task.setTargetPath(spec.url());
+        task.setMode(spec.mode());
+        task.setRepoId(repo.getId());
+        if (spec.incremental()) {
+            // 未显式指定基线时优先沿用上次扫描的提交（repo.last_commit_id），执行阶段再解析为具体 SHA
+            task.setBaseCommit(spec.baseCommit() != null ? spec.baseCommit() : repo.getLastCommitId());
+            task.setHeadCommit(spec.headCommit());
+        }
+        task.setTriggerType("MANUAL");
+        task.setStatus("PENDING");
+        task.setCreateTime(new Date());
+        return runAsync(task, t -> executeRepository(t, spec));
+    }
+
+    /**
      * 校验上传/粘贴的内容规模
      * <p>
      * 输入来自浏览器，必须有上限：单次请求携带的文件数、单个文件的体积都要卡住，
@@ -146,15 +204,29 @@ public class ScanService {
         task.setTriggerType("MANUAL");
         task.setStatus("PENDING");
         task.setCreateTime(new Date());
-        taskMapper.insert(task);
+        return runAsync(task, t -> {
+            if (units == null) {
+                execute(t);
+            } else {
+                executeUnits(t, units);
+            }
+        });
+    }
 
+    /**
+     * 任务入库后提交到 worker 池异步执行
+     * <p>
+     * 外层 catch 只兜底记录日志：各 execute* 方法内部已把异常落成 FAILED 状态，
+     * 这里防止极端情况下（如状态落库本身再抛异常）异常逃逸到线程池。
+     * @param task 已构造但未入库的任务
+     * @param body 在 worker 线程中执行的逻辑
+     * @return 已入库的任务
+     */
+    private ScanTask runAsync(ScanTask task, Consumer<ScanTask> body) {
+        taskMapper.insert(task);
         executor.submit(() -> {
             try {
-                if (units == null) {
-                    execute(task);
-                } else {
-                    executeUnits(task, units);
-                }
+                body.accept(task);
             } catch (RuntimeException e) {
                 log.error("扫描任务 {} 执行失败", task.getId(), e);
             }
@@ -191,6 +263,66 @@ public class ScanService {
         } catch (Exception e) {
             return markFailed(task, startedAt, e);
         }
+    }
+
+    /**
+     * 在线执行 GitHub 仓库扫描（同步；与 execute / executeUnits 对称）
+     * <p>
+     * FULL 拉取 head 提交下的全部 .java；INCREMENTAL 只拉取 base..head 之间变更的 .java。
+     * 源码以仓库相对路径作为展示路径，直接复用 {@link #analyzeUnits} 落库。
+     * 成功后回写任务的具体提交范围与仓库的增量基线（repo.last_commit_id）。
+     * @param task 已入库的任务
+     * @param spec 归一化后的请求
+     * @return 执行完毕的任务
+     */
+    public ScanTask executeRepository(ScanTask task, RepoScanSpec spec) {
+        long startedAt = markRunning(task);
+        try {
+            RuleConfigSet config = currentConfig();
+            GitHubRepoClient.RepoRef ref = GitHubRepoClient.parse(spec.url());
+
+            boolean useDefaultBranch = spec.branch() == null || spec.branch().isBlank();
+            String branch = useDefaultBranch ? githubClient.defaultBranch(ref) : spec.branch();
+            String headSha = githubClient.resolveCommit(ref,
+                    spec.headCommit() != null ? spec.headCommit() : branch);
+            String baseSha = spec.incremental() ? resolveBase(task, ref, headSha) : null;
+
+            List<String> paths = spec.incremental()
+                    ? githubClient.changedJavaPaths(ref, baseSha, headSha)
+                    : githubClient.javaPathsAt(ref, headSha);
+            List<SourceUnit> units = fetchUnits(ref, headSha, filterJavaPaths(paths, config, maxRepoFiles));
+
+            ScanTask done = analyzeUnits(task, units, config, startedAt);
+
+            // 记录本次实际扫描的具体提交（全量也留 head，便于对照"扫的是哪一版"）
+            done.setHeadCommit(headSha);
+            if (baseSha != null) {
+                done.setBaseCommit(baseSha);
+            }
+            taskMapper.updateById(done);
+            updateRepoBaseline(task.getRepoId(), useDefaultBranch ? branch : null, headSha);
+            return done;
+        } catch (Exception e) {
+            return markFailed(task, startedAt, e);
+        }
+    }
+
+    /**
+     * 解析增量扫描的基线提交
+     * <p>
+     * 优先级：请求显式指定 → 上次扫描记录（提交任务时已把 repo.last_commit_id 写入
+     * task.baseCommit）→ head 的父提交。仓库只有一次提交时给出明确提示。
+     */
+    private String resolveBase(ScanTask task, GitHubRepoClient.RepoRef ref, String headSha) {
+        String base = task.getBaseCommit();
+        if (base != null && !base.isBlank()) {
+            return githubClient.resolveCommit(ref, base);
+        }
+        String parent = githubClient.parentCommit(ref, headSha);
+        if (parent == null) {
+            throw new IllegalArgumentException("仓库只有一次提交，无法做增量扫描，请改用全量扫描");
+        }
+        return parent;
     }
 
     /** 逐单元解析、检查、落库 */
@@ -407,6 +539,121 @@ public class ScanService {
     // ==================== 内部 ====================
 
     /**
+     * 过滤仓库在线返回的文件路径
+     * <p>
+     * 只保留 .java、按忽略 glob 跳过 target/generated 等目录，去重排序后卡数量上限。
+     * 超出上限直接失败而不是静默截断——少扫的文件没人会发现，宁可不扫也不能扫一半。
+     * 抽成静态方法以便脱离 Spring 单测。
+     * @param paths 仓库相对路径（来自 trees / compare 接口）
+     * @param config 规则配置，提供忽略 glob
+     * @param maxFiles 文件数上限（cq.repo.max-files）
+     * @return 过滤后的路径，已去重并按字典序排序
+     */
+    static List<String> filterJavaPaths(List<String> paths, RuleConfigSet config, int maxFiles) {
+        TreeSet<String> result = new TreeSet<>();
+        if (paths != null) {
+            for (String raw : paths) {
+                if (raw == null) {
+                    continue;
+                }
+                String path = raw.replace('\\', '/').strip();
+                if (!path.endsWith(".java") || isIgnoredRelative(path, config)) {
+                    continue;
+                }
+                result.add(path);
+            }
+        }
+        if (result.size() > maxFiles) {
+            throw new IllegalArgumentException("仓库 .java 文件数 " + result.size() + " 超过上限 " + maxFiles
+                    + "，可在配置中调大 cq.repo.max-files 后重试");
+        }
+        return new ArrayList<>(result);
+    }
+
+    /**
+     * 并发拉取仓库文件正文
+     * <p>
+     * 单个文件抓取失败只跳过并告警，与目录扫描中"单文件读取失败不中断整体"保持一致。
+     */
+    private List<SourceUnit> fetchUnits(GitHubRepoClient.RepoRef ref, String sha, List<String> paths) {
+        List<Future<SourceUnit>> futures = new ArrayList<>(paths.size());
+        for (String path : paths) {
+            futures.add(fetchPool.submit(() -> {
+                try {
+                    return new SourceUnit(path, githubClient.fetchFile(ref, sha, path));
+                } catch (RuntimeException e) {
+                    log.warn("仓库文件拉取失败，已跳过: {} — {}", path, e.getMessage());
+                    return null;
+                }
+            }));
+        }
+        List<SourceUnit> units = new ArrayList<>(paths.size());
+        for (Future<SourceUnit> future : futures) {
+            try {
+                SourceUnit unit = future.get();
+                if (unit != null) {
+                    units.add(unit);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return units;
+            } catch (ExecutionException e) {
+                log.warn("仓库文件拉取任务异常，已跳过", e.getCause());
+            }
+        }
+        return units;
+    }
+
+    /**
+     * 按 URL 登记仓库（幂等）
+     * <p>
+     * repo.url 带唯一键：并发提交同一仓库时插入可能撞键，捕获后重查即可。
+     * 默认分支与 last_commit_id 在扫描成功后回填，这里只登记最小信息。
+     */
+    private Repo ensureRepo(String url, String name) {
+        LambdaQueryWrapper<Repo> query = new LambdaQueryWrapper<>();
+        query.eq(Repo::getUrl, url);
+        Repo existing = repoMapper.selectOne(query);
+        if (existing != null) {
+            return existing;
+        }
+        Repo repo = new Repo();
+        repo.setName(name);
+        repo.setUrl(url);
+        repo.setDefaultBranch("main");
+        repo.setEnabled(true);
+        repo.setCreateTime(new Date());
+        try {
+            repoMapper.insert(repo);
+            return repo;
+        } catch (DuplicateKeyException e) {
+            return repoMapper.selectOne(query);   // 并发登记：另一个请求已插入，重查即可
+        }
+    }
+
+    /**
+     * 扫描成功后回填仓库基线
+     * <p>
+     * last_commit_id 即下一次增量扫描的默认起点（Repo 实体中该字段的本意）。
+     * @param defaultBranch 本次解析到的默认分支；用户显式指定分支时为 null，不改动仓库配置
+     */
+    private void updateRepoBaseline(Long repoId, String defaultBranch, String headSha) {
+        if (repoId == null) {
+            return;
+        }
+        Repo repo = repoMapper.selectById(repoId);
+        if (repo == null) {
+            return;
+        }
+        if (defaultBranch != null) {
+            repo.setDefaultBranch(defaultBranch);
+        }
+        repo.setLastCommitId(headSha);
+        repo.setLastScanTime(new Date());
+        repoMapper.updateById(repo);
+    }
+
+    /**
      * 收集目标目录下的 Java 文件
      * <p>
      * 按配置的忽略 glob 跳过 target、generated 等目录。
@@ -431,7 +678,11 @@ public class ScanService {
     }
 
     private static boolean isIgnored(Path root, Path file, RuleConfigSet config) {
-        String relative = root.relativize(file).toString().replace('\\', '/');
+        return isIgnoredRelative(root.relativize(file).toString().replace('\\', '/'), config);
+    }
+
+    /** 按忽略 glob 判断仓库相对路径（以 / 分隔）是否应跳过 */
+    static boolean isIgnoredRelative(String relative, RuleConfigSet config) {
         for (String pattern : config.getThresholds().getIgnoredFilePatterns()) {
             if (relative.matches(com.cq.rule.RuleContext.globToRegex(pattern))) {
                 return true;

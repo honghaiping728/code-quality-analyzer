@@ -45,7 +45,7 @@ const $ = (id) => window.document.getElementById(id);
 
 // ---------- 1. 页面基本结构 ----------
 console.log('【页面结构】');
-check('三个来源页签存在', window.document.querySelectorAll('.source-tab').length === 3);
+check('四个来源页签存在', window.document.querySelectorAll('.source-tab').length === 4);
 check('概览页默认激活',
     $('view-overview')?.classList.contains('is-active') === true);
 
@@ -119,6 +119,26 @@ window.document.querySelector('.source-tab[data-source="upload"]')
     .dispatchEvent(new window.Event('click', { bubbles: true }));
 check('切到上传面板', $('pane-upload')?.classList.contains('is-active') === true);
 check('目录面板已隐藏', $('pane-path')?.classList.contains('is-active') === false);
+
+// ---------- 8. 仓库地址表单（只验结构，不触发真实拉取，避免依赖网络与限流） ----------
+console.log('\n【仓库地址表单】');
+window.document.querySelector('.source-tab[data-source="repo"]')
+    .dispatchEvent(new window.Event('click', { bubbles: true }));
+check('切到仓库面板', $('pane-repo')?.classList.contains('is-active') === true);
+check('目录面板已隐藏', $('pane-path')?.classList.contains('is-active') === false);
+check('仓库地址输入框存在', !!$('repoUrl'));
+check('分支输入框存在', !!$('repoBranch'));
+check('仓库扫描按钮存在', !!$('repoButton'));
+
+// 增量模式才显示提交范围输入行
+const repoMode = $('repoMode');
+check('提交范围默认隐藏', $('repoCommitRow')?.hidden === true);
+repoMode.value = 'INCREMENTAL';
+repoMode.dispatchEvent(new window.Event('change', { bubbles: true }));
+check('切到增量模式后提交范围出现', $('repoCommitRow')?.hidden === false);
+repoMode.value = 'FULL';
+repoMode.dispatchEvent(new window.Event('change', { bubbles: true }));
+check('切回全量模式后提交范围隐藏', $('repoCommitRow')?.hidden === true);
 
 // ---------- 汇总 ----------
 const failed = results.filter((r) => !r.ok);

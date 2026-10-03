@@ -37,6 +37,7 @@
                 <button type="button" class="source-tab is-active" data-source="path">服务器目录</button>
                 <button type="button" class="source-tab" data-source="upload">上传文件</button>
                 <button type="button" class="source-tab" data-source="snippet">粘贴代码</button>
+                <button type="button" class="source-tab" data-source="repo">仓库地址</button>
             </div>
 
             <!-- 目录扫描 -->
@@ -75,6 +76,32 @@
                     <textarea id="snippetSource" rows="12" spellcheck="false"
                               placeholder="在此粘贴 Java 代码…"></textarea>
                     <button type="submit" class="btn-primary" id="snippetButton">审查这段代码</button>
+                </form>
+            </div>
+
+            <!-- 仓库地址 -->
+            <div class="source-pane" id="pane-repo">
+                <p class="hint">
+                    输入公开 GitHub 仓库地址（https 或 git@ 形式均可）。源码在线拉取到内存分析，
+                    不克隆、不落盘；增量扫描只分析两次提交之间变更的 .java 文件。
+                </p>
+                <form class="snippet-form" id="repoForm">
+                    <input type="text" id="repoUrl"
+                           placeholder="https://github.com/owner/repo.git" autocomplete="off">
+                    <input type="text" id="repoBranch"
+                           placeholder="分支（可选，留空使用仓库默认分支）" autocomplete="off">
+                    <select id="repoMode">
+                        <option value="FULL">全量扫描</option>
+                        <option value="INCREMENTAL">增量扫描</option>
+                    </select>
+                    <div class="repo-commit-row" id="repoCommitRow" hidden>
+                        <input type="text" id="repoBaseCommit"
+                               placeholder="基线提交（留空：上次扫描的提交，首次为父提交）"
+                               autocomplete="off">
+                        <input type="text" id="repoHeadCommit"
+                               placeholder="目标提交（留空：默认分支最新提交）" autocomplete="off">
+                    </div>
+                    <button type="submit" class="btn-primary" id="repoButton">在线扫描</button>
                 </form>
             </div>
 

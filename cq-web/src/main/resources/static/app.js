@@ -288,6 +288,46 @@ document.getElementById('snippetForm').addEventListener('submit', async (event) 
     }
 });
 
+/* ---------------- 仓库地址扫描 ---------------- */
+
+// 增量模式才需要提交范围，全量扫描下隐藏这两项，避免让人误以为它们也生效
+const repoModeSelect = document.getElementById('repoMode');
+repoModeSelect.addEventListener('change', () => {
+    document.getElementById('repoCommitRow').hidden = repoModeSelect.value !== 'INCREMENTAL';
+});
+
+document.getElementById('repoForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = document.getElementById('repoButton');
+    const feedback = document.getElementById('scanFeedback');
+    const url = document.getElementById('repoUrl').value.trim();
+    if (!url) {
+        flash(feedback, '请输入 GitHub 仓库地址', true);
+        return;
+    }
+    button.disabled = true;
+    button.textContent = '扫描中…';
+    flash(feedback, `已提交仓库扫描：${url}，正在在线拉取源码并分析…`);
+    try {
+        const task = await api('/api/scan/repo', {
+            method: 'POST',
+            body: JSON.stringify({
+                url,
+                branch: document.getElementById('repoBranch').value.trim(),
+                mode: repoModeSelect.value,
+                baseCommit: document.getElementById('repoBaseCommit').value.trim(),
+                headCommit: document.getElementById('repoHeadCommit').value.trim(),
+            }),
+        });
+        await pollTask(task.id, feedback);
+    } catch (error) {
+        flash(feedback, `仓库扫描失败：${error.message}`, true);
+    } finally {
+        button.disabled = false;
+        button.textContent = '在线扫描';
+    }
+});
+
 /* ---------------- 问题列表 ---------------- */
 
 /**

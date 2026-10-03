@@ -191,6 +191,11 @@ main {
     margin-top: 8px;
 }
 
+.repo-commit-row {
+    display: flex;
+    gap: 10px;
+}
+
 textarea {
     font-family: var(--mono);
     font-size: 12.5px;

@@ -4,8 +4,10 @@ import com.cq.common.Result;
 import com.cq.common.model.ScanFile;
 import com.cq.common.model.ScanTask;
 import com.cq.report.ReportService;
+import com.cq.scan.RepoScanSpec;
 import com.cq.scan.ScanService;
 import com.cq.scan.SourceUnit;
+import com.cq.web.dto.RepoScanRequest;
 import com.cq.web.dto.ScanRequest;
 import com.cq.web.dto.SnippetRequest;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -110,6 +112,25 @@ public class ScanController {
         try {
             return Result.success(scanService.submitSources(
                     fileName, "SNIPPET", List.of(new SourceUnit(fileName, request.getSource()))));
+        } catch (IllegalArgumentException e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
+    /**
+     * 提交 GitHub 仓库在线扫描任务
+     * <p>
+     * 源码从 GitHub 接口按需拉取到内存，不克隆、不落盘，与上传/粘贴共用同一条分析链路。
+     * 参数校验（地址、模式、提交号）全部在 {@link RepoScanSpec} 内完成。
+     * @param request 含 url 的请求体
+     * @return 已创建的任务
+     */
+    @PostMapping("/repo")
+    public Result<ScanTask> repo(@RequestBody RepoScanRequest request) {
+        try {
+            RepoScanSpec spec = RepoScanSpec.of(request.getUrl(), request.getBranch(),
+                    request.getMode(), request.getBaseCommit(), request.getHeadCommit());
+            return Result.success(scanService.submitRepository(spec));
         } catch (IllegalArgumentException e) {
             return Result.error(e.getMessage());
         }
