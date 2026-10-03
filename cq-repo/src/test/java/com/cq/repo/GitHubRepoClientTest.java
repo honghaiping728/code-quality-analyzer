@@ -52,6 +52,22 @@ class GitHubRepoClientTest {
     }
 
     @Test
+    @DisplayName("owner/repo 简写被接受并转 canonical，路径形态仍被拒绝")
+    void parsesBareShorthand() {
+        GitHubRepoClient.RepoRef ref = GitHubRepoClient.parse("honghaiping728/code-quality-analyzer");
+        assertEquals("honghaiping728", ref.owner());
+        assertEquals("code-quality-analyzer", ref.repo());
+        assertEquals("https://github.com/honghaiping728/code-quality-analyzer", ref.canonicalUrl());
+        assertEquals("repo", GitHubRepoClient.parse("owner/repo.git").repo());
+
+        // 本地路径形态不得被误认为仓库简写
+        assertThrows(IllegalArgumentException.class, () -> GitHubRepoClient.parse("/tmp/owner/repo"));
+        assertThrows(IllegalArgumentException.class, () -> GitHubRepoClient.parse("./owner/repo"));
+        assertThrows(IllegalArgumentException.class, () -> GitHubRepoClient.parse("~/projects/repo"));
+        assertThrows(IllegalArgumentException.class, () -> GitHubRepoClient.parse("owner"));
+    }
+
+    @Test
     @DisplayName("非 GitHub 地址、空地址与含非法字符的地址被拒绝，且提示有用")
     void rejectsInvalidUrls() {
         assertThrows(IllegalArgumentException.class, () -> GitHubRepoClient.parse(null));

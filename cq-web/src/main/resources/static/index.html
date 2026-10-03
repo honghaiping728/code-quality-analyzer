@@ -82,12 +82,13 @@
             <!-- 仓库地址 -->
             <div class="source-pane" id="pane-repo">
                 <p class="hint">
-                    输入公开 GitHub 仓库地址（https 或 git@ 形式均可）。源码在线拉取到内存分析，
-                    不克隆、不落盘；增量扫描只分析两次提交之间变更的 .java 文件。
+                    输入公开 GitHub 仓库地址（https、git@ 或 owner/repo 简写均可）。源码在线拉取到
+                    内存分析，不克隆、不落盘；增量扫描只分析两次提交之间变更的 .java 文件。
                 </p>
                 <form class="snippet-form" id="repoForm">
                     <input type="text" id="repoUrl"
-                           placeholder="https://github.com/owner/repo.git" autocomplete="off">
+                           placeholder="https://github.com/owner/repo.git，也可直接填 owner/repo"
+                           autocomplete="off">
                     <input type="text" id="repoBranch"
                            placeholder="分支（可选，留空使用仓库默认分支）" autocomplete="off">
                     <select id="repoMode">

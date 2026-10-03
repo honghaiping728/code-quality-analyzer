@@ -46,7 +46,7 @@ public class GitHubRepoClient {
     /** owner / repo 允许的字符集 */
     private static final Pattern NAME_SEGMENT = Pattern.compile("[A-Za-z0-9_.-]+");
     private static final String USAGE_HINT =
-            "当前仅支持 GitHub 仓库地址，形如 https://github.com/owner/repo.git 或 git@github.com:owner/repo.git";
+            "当前仅支持 GitHub 仓库地址，形如 https://github.com/owner/repo.git、git@github.com:owner/repo.git 或 owner/repo";
 
     private final HttpClient http;
     private final String token;
@@ -88,7 +88,9 @@ public class GitHubRepoClient {
      * 解析仓库地址为 owner/repo
      * <p>
      * 接受 {@code https://github.com/owner/repo(.git)}（含结尾斜杠、{@code /tree/...} 尾巴、
-     * www 前缀、http 协议）与 {@code git@github.com:owner/repo(.git)}；其余一律拒绝并给出使用提示。
+     * www 前缀、http 协议）、{@code git@github.com:owner/repo(.git)}，以及 {@code owner/repo}
+     * 简写（与 {@code gh repo clone}、{@code git clone owner/repo} 的使用习惯一致）；
+     * 其余一律拒绝并给出使用提示。
      * @param url 仓库地址
      * @return 仓库坐标
      * @throws IllegalArgumentException 地址为空、非 GitHub 或格式非法
@@ -105,11 +107,14 @@ public class GitHubRepoClient {
             String lower = text.toLowerCase();
             boolean httpsForm = lower.startsWith("https://github.com/") || lower.startsWith("http://github.com/")
                     || lower.startsWith("https://www.github.com/") || lower.startsWith("http://www.github.com/");
-            if (!httpsForm) {
+            if (httpsForm) {
+                int hostIndex = lower.indexOf("github.com/");
+                tail = text.substring(hostIndex + "github.com/".length());
+            } else if (isBareShorthand(text)) {
+                tail = text;
+            } else {
                 throw new IllegalArgumentException(USAGE_HINT);
             }
-            int hostIndex = lower.indexOf("github.com/");
-            tail = text.substring(hostIndex + "github.com/".length());
         }
         while (tail.endsWith("/")) {
             tail = tail.substring(0, tail.length() - 1);
@@ -124,6 +129,22 @@ public class GitHubRepoClient {
             throw new IllegalArgumentException("仓库地址应为 owner/repo 形式，" + USAGE_HINT);
         }
         return new RepoRef(segments[0], segments[1]);
+    }
+
+    /**
+     * 是否为 {@code owner/repo} 简写
+     * <p>
+     * 排除了绝对/相对路径形态（以 {@code /}、{@code ~}、{@code .} 开头）与带协议的形式，
+     * 避免把「本想扫描本地目录」的路径误当成 GitHub 仓库。
+     */
+    private static boolean isBareShorthand(String text) {
+        if (text.contains("://") || text.startsWith("/") || text.startsWith("~") || text.startsWith(".")) {
+            return false;
+        }
+        String[] segments = text.split("/");
+        return segments.length >= 2
+                && NAME_SEGMENT.matcher(segments[0]).matches()
+                && NAME_SEGMENT.matcher(segments[1]).matches();
     }
 
     // ==================== 在线读取 ====================

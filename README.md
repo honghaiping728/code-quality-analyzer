@@ -169,8 +169,8 @@ cq:
 
 GitHub 仓库扫描同样**不落盘**：源码经 GitHub 接口按需拉取到内存，磁盘上不留克隆目录。几条边界：
 
-- 仅支持公开的 GitHub 仓库（https 或 `git@github.com:` 形式均可，后者解析为 owner/repo 后走 https）；
-  私有仓库需要凭证，暂未支持
+- 仅支持公开的 GitHub 仓库（`https://github.com/owner/repo`、`git@github.com:owner/repo` 或
+  `owner/repo` 简写均可，后两者解析为 owner/repo 后走 https）；私有仓库需要凭证，暂未支持
 - 未认证调用 api.github.com 限流 60 次/小时（文件正文走 raw 域不计入该额度），配置
   `cq.repo.github-token` 后提升为 5000 次/小时；单次扫描的 `.java` 文件数上限为
   `cq.repo.max-files`（默认 1000），超出直接失败而不是静默截断
