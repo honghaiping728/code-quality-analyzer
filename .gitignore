@@ -20,3 +20,18 @@ Thumbs.db
 
 # 前端集成测试的依赖
 node_modules/
+
+# 前端构建：frontend-maven-plugin 自带的 Node 安装目录
+.frontend-tools/
+
+# 前端源码工程可能出现的构建产物（实际构建直接写进 cq-web/target）
+dist/
+
+# Playwright 端到端测试产物
+playwright-report/
+blob-report/
+test-results/
+playwright/.cache/
+
+# 视觉核对截图（生成的，不入库）
+frontend-test/shots/

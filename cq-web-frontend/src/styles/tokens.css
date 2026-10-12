@@ -1,0 +1,189 @@
+/* =========================================================================
+   设计令牌 —— 亮 / 暗两套语义变量
+   -------------------------------------------------------------------------
+   原则延续原控制台：灰阶为底，彩色克制（只出现在主色、严重级、四维度色、图表），
+   其余层级一律用灰阶表达，避免"彩色满天飞"。
+   所有取值均已用脚本校验，不靠肉眼判断：
+     · 正文/次要文字/主色/语义色 —— WCAG AA 正文对比度 >= 4.5:1（亮暗各一套）
+     · 四维度分类色 —— dataviz 校验器：明度带、彩度下限、色盲(CVD)与常视觉分离度、
+       表面对比度，亮暗两套全部 PASS（暗色表面 #161b22 上四色均 >= 3:1）
+   ========================================================================= */
+
+:root {
+    color-scheme: light;
+
+    /* 表面与线条：三层递进（画布 / 卡片 / 次级底），线条两级（分隔 / 强描边） */
+    --canvas: #f6f7f8;
+    --surface: #ffffff;
+    --surface-2: #f2f4f7;
+    --border: #e5e7eb;
+    --border-strong: #d1d5db;
+    --input-border: #c9cfd8;
+
+    /* 文字三级：正文 17.8:1 / 次级 7.6:1 / 提示 4.8:1（压白卡片） */
+    --text: #131820;
+    --text-2: #4b5563;
+    --text-muted: #6b7280;
+
+    /* 主色（唯一彩色主调）：文字用 5.8:1，白字压主色底 5.8:1 */
+    --accent: #1d5fd0;
+    --accent-hover: #174ca6;
+    --accent-soft: #eef4fd;
+    --accent-ring: rgba(29, 95, 208, .28);
+
+    /* 语义色（状态） */
+    --ok: #15803d;
+    --warn: #b45309;
+    --danger: #c0271f;
+    --neutral-badge: #6b7280;
+    --ok-soft: #ecfdf3;
+    --warn-soft: #fffaeb;
+    --danger-soft: #fef3f2;
+
+    /* 严重级：白字压色底，四色对比度 6.47 / 5.18 / 5.02 / 4.83:1 */
+    --sev-blocker: #b91c1c;
+    --sev-critical: #c2410c;
+    --sev-major: #b45309;
+    --sev-minor: #6b7280;
+
+    /* 四维度分类色（分类槽 1-4，固定顺序，不循环；亮色档） */
+    --type-bug: #2a78d6;
+    --type-security: #eb6834;
+    --type-performance: #1baf7a;
+    --type-style: #eda100;
+
+    /* 代码/差异视图：刻意保持灰阶，避免与分类色抢注意力 */
+    --code-bg: #f8f9fb;
+    --diff-add-bg: #e8f5ec;
+    --diff-del-bg: #fdecec;
+    --diff-add-ink: #14532d;
+    --diff-del-ink: #7f1d1d;
+
+    /* 圆角与阴影：阴影只用于"浮起来"的东西（卡片、吸顶条、弹层） */
+    --radius-sm: 6px;
+    --radius: 10px;
+    --radius-lg: 14px;
+    --radius-pill: 999px;
+    --shadow-1: 0 1px 2px rgba(16, 24, 40, .04), 0 1px 3px rgba(16, 24, 40, .06);
+    --shadow-2: 0 4px 12px rgba(16, 24, 40, .07), 0 2px 4px rgba(16, 24, 40, .04);
+    --shadow-3: 0 16px 32px rgba(16, 24, 40, .12);
+
+    /* 字体：数字/ID/代码用等宽，界面用系统无衬线（中文优先 Noto Sans SC） */
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC",
+            "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+
+    /* 间距刻度 */
+    --sp-1: 4px;
+    --sp-2: 8px;
+    --sp-3: 12px;
+    --sp-4: 16px;
+    --sp-5: 20px;
+    --sp-6: 24px;
+    --sp-8: 32px;
+
+    --content-max: 1360px;
+}
+
+/* 暗色：不是简单反色，而是重新取一套步进值（文字/主色/分类色各自为暗表面重选） */
+:root[data-theme='dark'] {
+    color-scheme: dark;
+
+    --canvas: #0d1117;
+    --surface: #161b22;
+    --surface-2: #1b222c;
+    --border: #262d38;
+    --border-strong: #39414e;
+    --input-border: #3d4754;
+
+    /* 正文 14.6:1 / 次级 9.6:1 / 提示 5.6:1（压深色卡片） */
+    --text: #e6edf3;
+    --text-2: #b6c2cf;
+    --text-muted: #8b949e;
+
+    --accent: #6ea8fe;
+    --accent-hover: #93bdff;
+    --accent-soft: #14213a;
+    --accent-ring: rgba(110, 168, 254, .35);
+
+    --ok: #3fb950;
+    --warn: #d29922;
+    --danger: #f85149;
+    --neutral-badge: #8b949e;
+    --ok-soft: #0f2417;
+    --warn-soft: #2a1f06;
+    --danger-soft: #2d1416;
+
+    /* 深色底上改用亮档徽标：深字压亮色底 6.2 / 7.5 / 7.7 / 6.9:1 */
+    --sev-blocker: #f97066;
+    --sev-critical: #ff8a5c;
+    --sev-major: #e3a008;
+    --sev-minor: #9aa4b2;
+
+    /* 暗色档分类色：同四色为深表面重新步进，四色对 #161b22 均 >= 3:1 */
+    --type-bug: #3987e5;
+    --type-security: #d95926;
+    --type-performance: #199e70;
+    --type-style: #c98500;
+
+    --code-bg: #10151c;
+    --diff-add-bg: #0f2a1a;
+    --diff-del-bg: #2d1416;
+    --diff-add-ink: #7ee2a8;
+    --diff-del-ink: #ffb3b0;
+
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, .4);
+    --shadow-2: 0 4px 14px rgba(0, 0, 0, .45);
+    --shadow-3: 0 18px 36px rgba(0, 0, 0, .55);
+}
+
+/* 跟随系统（用户在界面上没选过时的默认）：显式选过亮色则不受影响 */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+        color-scheme: dark;
+
+        --canvas: #0d1117;
+        --surface: #161b22;
+        --surface-2: #1b222c;
+        --border: #262d38;
+        --border-strong: #39414e;
+        --input-border: #3d4754;
+
+        --text: #e6edf3;
+        --text-2: #b6c2cf;
+        --text-muted: #8b949e;
+
+        --accent: #6ea8fe;
+        --accent-hover: #93bdff;
+        --accent-soft: #14213a;
+        --accent-ring: rgba(110, 168, 254, .35);
+
+        --ok: #3fb950;
+        --warn: #d29922;
+        --danger: #f85149;
+        --neutral-badge: #8b949e;
+        --ok-soft: #0f2417;
+        --warn-soft: #2a1f06;
+        --danger-soft: #2d1416;
+
+        --sev-blocker: #f97066;
+        --sev-critical: #ff8a5c;
+        --sev-major: #e3a008;
+        --sev-minor: #9aa4b2;
+
+        --type-bug: #3987e5;
+        --type-security: #d95926;
+        --type-performance: #199e70;
+        --type-style: #c98500;
+
+        --code-bg: #10151c;
+        --diff-add-bg: #0f2a1a;
+        --diff-del-bg: #2d1416;
+        --diff-add-ink: #7ee2a8;
+        --diff-del-ink: #ffb3b0;
+
+        --shadow-1: 0 1px 2px rgba(0, 0, 0, .4);
+        --shadow-2: 0 4px 14px rgba(0, 0, 0, .45);
+        --shadow-3: 0 18px 36px rgba(0, 0, 0, .55);
+    }
+}

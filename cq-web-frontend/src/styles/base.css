@@ -1,0 +1,199 @@
+/* =========================================================================
+   基础层：重置、排版、布局骨架与动效约定
+   ========================================================================= */
+
+* { box-sizing: border-box; }
+
+/* hidden 属性必须压过任何 display 规则：本项目的增量提交行、进度条等
+   都是 flex 容器且靠 hidden 控制显隐，曾经踩过这个坑 */
+[hidden] { display: none !important; }
+
+html, body, #app {
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
+}
+
+body {
+    background: var(--canvas);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color .2s ease, color .2s ease;
+}
+
+h1, h2, h3, h4 { margin: 0; font-weight: 650; line-height: 1.35; }
+
+a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+/* 键盘可达性：鼠标点击不触发 :focus-visible，不影响鼠标用户的观感 */
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-radius: 2px;
+}
+
+/* 滚动条：细、低对比，不抢视觉重心 */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+}
+
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: var(--radius-pill);
+}
+*::-webkit-scrollbar-thumb:hover { background-clip: content-box; background-color: var(--text-muted); }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------------- 布局骨架 ---------------- */
+
+.shell {
+    max-width: var(--content-max);
+    margin: 0 auto;
+    padding: 0 var(--sp-6);
+}
+
+.view-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-5);
+}
+
+/* 卡片：全站唯一的分组容器 */
+.panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--sp-5) var(--sp-6);
+    box-shadow: var(--shadow-1);
+    transition: box-shadow .18s ease, border-color .18s ease;
+}
+
+.panel > h2 {
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-1);
+}
+
+.panel > h2 + .hint { margin-top: 0; }
+
+.panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    flex-wrap: wrap;
+}
+
+.panel-head h2 {
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+}
+
+.section-title {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    color: var(--text-2);
+    margin: var(--sp-5) 0 var(--sp-2);
+}
+
+/* ---------------- 文本与通用元信息 ---------------- */
+
+.hint {
+    color: var(--text-muted);
+    font-size: 12.5px;
+    line-height: 1.7;
+    margin: 6px 0 0;
+}
+
+.empty {
+    color: var(--text-muted);
+    text-align: center;
+    padding: var(--sp-8) 0;
+    margin: 0;
+    font-size: 13px;
+}
+
+.mono { font-family: var(--mono); }
+
+.count {
+    font-weight: 400;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-size: 12px;
+}
+
+/* 徽标：中性底 + 等宽字，语义由内容决定（枚举原文直接显示，不做翻译） */
+.badge {
+    display: inline-block;
+    padding: 1px 7px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+}
+
+.badge-ok {
+    color: var(--ok);
+    background: var(--ok-soft);
+    border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+}
+
+/* 长文本单行截断（完整内容放 title，不截断 DOM） */
+.clip {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+}
+
+/* ---------------- 动效 ---------------- */
+
+/* 路由切换：轻微上浮淡入，150ms 内完成，不拖沓 */
+.view-fade-enter-active { transition: opacity .18s ease, transform .18s ease; }
+.view-fade-leave-active { transition: opacity .12s ease; }
+.view-fade-enter-from { opacity: 0; transform: translateY(6px); }
+.view-fade-leave-to { opacity: 0; }
+
+/* 列表行进入：用极小位移表达"新内容"，避免大动效喧宾夺主 */
+@keyframes rise-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
+}
+
+.rise-in { animation: rise-in .22s ease both; }
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: .001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .001ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* ---------------- 响应式 ---------------- */
+
+@media (max-width: 860px) {
+    .shell { padding: 0 var(--sp-4); }
+    .panel { padding: var(--sp-4); }
+}

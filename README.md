@@ -48,7 +48,8 @@ Git 仓库接入 → 增量代码获取 → AST 解析 → 分析引擎 → 问�
 | `cq-suggestion` | 修复建议 | 确定性模板 + Code Agent 两层生成、Diff 构造、采纳/误报反馈 | ✅ 已实现 |
 | `cq-report` | 报告与趋势 | 报告生成、问题密度/类别分布统计、跨任务质量趋势 | ✅ 已实现 |
 | `cq-admin` | 规则与阈值管理 | 规则启停、阈值配置、忽略列表、反馈统计 | ✅ 已实现 |
-| `cq-web` | 启动模块 | Spring Boot 启动入口、38 个 REST 接口、黑白简约前端控制台 | ✅ 已实现 |
+| `cq-web` | 启动模块 | Spring Boot 启动入口、38 个 REST 接口、单页应用路由回退 | ✅ 已实现 |
+| `cq-web-frontend` | 前端控制台 | 独立的 npm 工程（Vue 3 + Element Plus + Vite）：六个视图、双主题、自绘趋势图，由 Maven 触发构建 | ✅ 已实现 |
 
 > 状态说明：✅ 已实现并验证 · 🟡 骨架可运行 · ⬜ 待开发
 
@@ -83,8 +84,8 @@ Git 仓库接入 → 增量代码获取 → AST 解析 → 分析引擎 → 问�
 | 后端 | Redis（扫描任务缓存） | ⬜ 规划中 |
 | 代码分析 | JavaParser（AST）、JGit（Git API）、规则引擎 | ✅ 已落地 |
 | AI 能力 | LLM（代码理解与修复建议）、Prompt 工程、置信度融合 | ✅ 已落地 |
-| 前端 | 原生 HTML/CSS/JS，黑白简约风格 | ✅ 已落地 |
-| 前端 | Vue 3 + Element Plus（规划中的完整前端） | ⬜ 规划中 |
+| 前端 | Vue 3 + Element Plus + Vite，灰阶为底、彩色克制的双主题控制台 | ✅ 已落地 |
+| 前端 | 亮/暗两套主题，配色对比度与分类色均经脚本校验 | ✅ 已落地 |
 | 集成 | GitLab / Gitea Webhook | ⬜ 规划中 |
 
 **当前工程基线**：Java 21 · Spring Boot 3.4.4 · Maven 多模块 · JavaParser 3.26.4 · JGit 6.10.0 · MyBatis-Plus 3.5.9 · MySQL 8.0
@@ -94,12 +95,15 @@ Git 仓库接入 → 增量代码获取 → AST 解析 → 分析引擎 → 问�
 - 后端 JUnit 5 共 181 个用例 —— AST 解析（类型/方法/调用图/圈复杂度/容错）、
   42 条规则每条配「正例命中 + 负例不误报」（负例是重点）、修复模板匹配、上传内容校验、
   仓库地址解析与在线文件筛选、大模型配置的优先级与回退（含密钥掩码边界）
-- 前端 `frontend-test/` 用 jsdom 驱动真实页面，覆盖单元测试触达不到的交互
-  （不含在 `mvn test` 中，需先启动服务再 `npm test`）
+- 前端 `frontend-test/` 用 Playwright 驱动**真实浏览器**跑控制台，15 条用例覆盖扫描全流程、
+  分页过滤、详情、规则与大模型配置、主题切换与深链直达（不含在 `mvn test` 中，
+  需先启动服务再 `npm test`）；另有 `npm run shots` 出亮/暗两套截图供人眼核对视觉
 
 ## 八、快速开始
 
 环境要求：JDK 21、Maven 3.6+、MySQL 8.0。
+前端由 Maven 自动构建（`frontend-maven-plugin` 会自带一份 Node），**构建机无需预装 Node**，
+代价是首次构建需要联网下载一次 Node 与 npm 依赖。
 
 ### 1. 初始化数据库
 
@@ -115,26 +119,40 @@ docker exec -i mysql mysql -uroot -p123456 --default-character-set=utf8mb4 < doc
 ### 2. 构建与启动
 
 ```bash
-# 全量构建（首次会下载依赖）
+# 全量构建（首次会下载依赖 + 自带 Node + npm 依赖）
 mvn clean install
 
-# 后端测试（181 个用例）
-mvn test
+# 只跑后端（181 个用例，跳过前端构建）
+mvn test -Dskip.frontend
 
-# 前端集成测试（需先启动服务，见 frontend-test/README.md）
-# cd frontend-test && npm install && npm test
-
-# 启动 Web 服务，默认端口 8080
+# 启动 Web 服务，默认端口 8080（会先构建前端，产物直接进 target/classes/static）
 mvn -pl cq-web spring-boot:run
 # 或使用打包后的 fat jar
 java -jar cq-web/target/cq-web-0.1.0-SNAPSHOT.jar
+
+# 前端端到端测试（需先启动服务，见 frontend-test/README.md）
+# cd frontend-test && npm install && npm run install-browser && npm test
 ```
+
+改前端时的迭代方式（带热更新，不用等 Maven）：
+
+```bash
+mvn -pl cq-web spring-boot:run -Dskip.frontend     # 后端常驻 8080
+cd cq-web-frontend && npm install && npm run dev   # Vite 开发服务器 5173，/api 已代理到 8080
+```
+
+只改样式/组件后用 `npm run build` 重新构建即可刷新正在运行的服务
+（vite 直接写 `target/classes/static`，无需重启）。
 
 ### 3. 打开控制台
 
 浏览器访问 **http://localhost:8080/** ，在「概览」页选择一种代码来源发起审查 —— 输入服务器目录路径、
-上传本地 `.java` 文件、直接粘贴一段代码，或输入一个 GitHub 仓库地址；随后在「问题列表」
-「问题详情」「报告与趋势」「规则配置」中查看结果，在「大模型配置」中接入或切换大模型。
+上传本地 `.java` 文件、直接粘贴一段代码，或输入一个 GitHub 仓库地址；随后在「问题列表」进入
+「问题详情」查看成因与修复建议，在「报告与趋势」看质量走势，在「规则配置」调规则与阈值，
+在「大模型配置」接入或切换大模型。
+
+右上角可切换**亮色 / 暗色**主题（首次访问跟随系统，选择记在本地）。路由是 history 模式，
+`/issues/123` 这类地址可以直接分享或刷新；问题列表的筛选条件也写在 URL 里，后退键可用。
 
 ### 4. 配置大模型（可选）
 
@@ -242,7 +260,7 @@ summary.getParseErrors();                   // 语法错误（不抛异常，返
 | 规则模板库 | 4 类维度合计不少于 40 条（Bug / 安全 / 性能 / 规范各 10 条以上） |
 | 数据库表规模 | 约 15 张（仓库、扫描任务、文件快照、问题记录、修复建议、采纳反馈、报告、规则配置、大模型密钥配置等） |
 | REST 接口规模 | 约 28 个 |
-| 前端页面 | 约 7 个（仓库管理、扫描任务、问题列表与详情、Diff 修复视图、质量报告、趋势图、规则配置） |
+| 前端页面 | 6 个视图（概览、问题列表、问题详情、报告与趋势、规则配置、大模型配置）+ 亮/暗两套主题 |
 | 评测集建设 | 含缺陷样例不少于 200 个（覆盖四类问题的正例与负例），用于精确率 / 召回率评估 |
 | 中间件与集成点 | 4 项：Redis 、JGit 、Webhook 接收、LLM 调用 |
 | 评测与测试 | 双引擎相对纯规则引擎的误报率对比、修复建议采纳率抽样、增量扫描成本对比 |
@@ -279,8 +297,9 @@ summary.getParseErrors();                   // 语法错误（不抛异常，返
 | 5 | 规则引擎（42 条四维规则 + 单元测试） | ✅ |
 | 6 | Code Agent 与修复建议生成 | ✅ |
 | 7 | 报告与趋势、规则与阈值管理 | ✅ |
-| 8 | MySQL 持久化、REST 接口、黑白简约控制台 | ✅ |
-| 9 | 评测集建设与联调优化 | ⬜ |
+| 8 | MySQL 持久化、REST 接口、前端控制台 | ✅ |
+| 9 | 控制台重写为 Vue 3 + Element Plus：双主题配色、URL 路由、Playwright 端到端测试 | ✅ |
+| 10 | 评测集建设与联调优化 | ⬜ |
 
 ### 规则清单（42 条）
 
@@ -313,7 +332,13 @@ code-quality-analyzer/
 ├── cq-suggestion/            # 修复建议（模板 + Code Agent 两层）
 ├── cq-report/                # 报告与趋势
 ├── cq-admin/                 # 规则与阈值管理
-└── cq-web/                   # Spring Boot 启动模块
-    └── src/main/resources/static/   # 黑白简约前端控制台
+├── cq-web/                   # Spring Boot 启动模块（含唯一的前端相关后端改动：SpaWebConfig 路由回退）
+├── cq-web-frontend/          # 前端源码：Vue 3 + Element Plus + Vite（构建产物不进仓库，直接写 target/classes/static）
+│   └── src/
+│       ├── styles/           # 设计令牌（亮/暗两套）与 Element Plus 主题映射
+│       ├── api/              # 统一的请求封装与各模块接口
+│       ├── components/       # 徽标、维度色点、指标条、轻提示
+│       └── views/            # 概览 / 问题列表 / 问题详情 / 报告与趋势 / 规则配置 / 大模型配置
+└── frontend-test/            # 前端端到端测试（Playwright 驱动真实浏览器）
 ```
 

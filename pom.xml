@@ -21,6 +21,12 @@
         <!-- MyBatis-Plus：版本不在 Spring Boot 依赖管理中，需显式指定 -->
         <mybatis-plus.version>3.5.9</mybatis-plus.version>
         <!-- MySQL 驱动版本由 spring-boot-dependencies 统一管理，无需指定 -->
+        <!-- 前端构建：由 frontend-maven-plugin 自带 Node，构建机无需预装 -->
+        <frontend-maven-plugin.version>1.15.4</frontend-maven-plugin.version>
+        <!-- 必须带前导 v：插件拿 node 的版本输出做等值比较，漏掉 v 会导致每次构建都重新下载 Node -->
+        <node.version>v22.14.0</node.version>
+        <!-- 只跑后端时：mvn test -Dskip.frontend -->
+        <skip.frontend>false</skip.frontend>
     </properties>
     <modules>
         <module>cq-common</module>

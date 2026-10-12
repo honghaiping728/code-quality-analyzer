@@ -90,6 +90,97 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
+
+            <!--
+                前端构建：Vue 3 + Element Plus（源码在 ../cq-web-frontend），产物由 vite 直接写入
+                target/classes/static，因此 spring-boot:run 与 fat jar 都能拿到页面。
+
+                · 自带的 Node 装到工程外的 .frontend-tools/（已 gitignore），mvn clean 不会让它重下；
+                · 构建机无需预装 Node/npm，代价是首次构建要联网下载一次 Node；
+                · 只跑后端时可以跳过：mvn test -Dskip.installnodenpm -Dskip.npm
+            -->
+            <plugin>
+                <groupId>com.github.eirslett</groupId>
+                <artifactId>frontend-maven-plugin</artifactId>
+                <version>${frontend-maven-plugin.version}</version>
+                <configuration>
+                    <installDirectory>${project.basedir}/../.frontend-tools</installDirectory>
+                    <workingDirectory>${project.basedir}/../cq-web-frontend</workingDirectory>
+                    <skip>${skip.frontend}</skip>
+                    <environmentVariables>
+                        <CI>true</CI>
+                        <npm_config_fund>false</npm_config_fund>
+                        <npm_config_audit>false</npm_config_audit>
+                    </environmentVariables>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>install-node-and-npm</id>
+                        <goals>
+                            <goal>install-node-and-npm</goal>
+                        </goals>
+                        <phase>generate-resources</phase>
+                        <configuration>
+                            <nodeVersion>${node.version}</nodeVersion>
+                        </configuration>
+                    </execution>
+                    <!-- ci 而非 install：严格按 package-lock.json 安装，构建可复现 -->
+                    <execution>
+                        <id>npm-ci</id>
+                        <goals>
+                            <goal>npm</goal>
+                        </goals>
+                        <phase>generate-resources</phase>
+                        <configuration>
+                            <arguments>ci --prefer-offline</arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>npm-build</id>
+                        <goals>
+                            <goal>npm</goal>
+                        </goals>
+                        <phase>generate-resources</phase>
+                        <configuration>
+                            <arguments>run build</arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!--
+                不允许"静默发出一个没有界面的 jar"：npm 失败本身会让 Maven 失败，
+                这条再堵住另一种情况——整个前端产物缺失（例如在干净工作区上带了 -Dskip.frontend）。
+                process-classes 早于 test-compile，因此 spring-boot:run 也会被拦住。
+                版本由 spring-boot-dependencies 统一管理，无需指定。
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>require-built-frontend</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <phase>process-classes</phase>
+                        <configuration>
+                            <skip>${skip.frontend}</skip>
+                            <rules>
+                                <requireFilesExist>
+                                    <message>
+                                        前端产物缺失：${project.build.outputDirectory}/static/index.html 不存在。
+                                        请去掉 -Dskip.frontend 重新构建，或先执行 mvn -pl cq-web generate-resources。
+                                    </message>
+                                    <files>
+                                        <file>${project.build.outputDirectory}/static/index.html</file>
+                                    </files>
+                                </requireFilesExist>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 </project>

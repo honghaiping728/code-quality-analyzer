@@ -1,0 +1,274 @@
+/* =========================================================================
+   Element Plus 主题对接
+   -------------------------------------------------------------------------
+   把 Element Plus 的变量全部映射到本项目令牌，避免出现"组件是 Element 蓝、
+   页面是项目蓝"的割裂。主色的 light-{3,5,7,8,9} / dark-2 阶梯是组件悬停、
+   边框、浅底的来源，只改 --el-color-primary 会导致悬停态仍是默认色，
+   因此这里把整条阶梯按 Element Plus 的混色公式算好后写死。
+   ========================================================================= */
+
+:root {
+    /* 主色阶梯：#1d5fd0 与白按 30/50/70/80/90% 混合 */
+    --el-color-primary: #1d5fd0;
+    --el-color-primary-light-3: #618fde;
+    --el-color-primary-light-5: #8eafe8;
+    --el-color-primary-light-7: #bbcff1;
+    --el-color-primary-light-8: #d2dff6;
+    --el-color-primary-light-9: #e8effa;
+    --el-color-primary-dark-2: #174ca6;
+
+    --el-color-success: var(--ok);
+    --el-color-warning: var(--warn);
+    --el-color-danger: var(--danger);
+    --el-color-error: var(--danger);
+    --el-color-info: var(--text-muted);
+    --el-color-success-light-9: var(--ok-soft);
+    --el-color-warning-light-9: var(--warn-soft);
+    --el-color-danger-light-9: var(--danger-soft);
+    --el-color-error-light-9: var(--danger-soft);
+
+    --el-text-color-primary: var(--text);
+    --el-text-color-regular: var(--text-2);
+    --el-text-color-secondary: var(--text-muted);
+    --el-text-color-placeholder: var(--text-muted);
+    --el-text-color-disabled: var(--text-muted);
+
+    --el-bg-color: var(--surface);
+    --el-bg-color-page: var(--canvas);
+    --el-bg-color-overlay: var(--surface);
+
+    --el-border-color: var(--border);
+    --el-border-color-light: var(--border);
+    --el-border-color-lighter: var(--border);
+    --el-border-color-extra-light: var(--border);
+    --el-border-color-dark: var(--border-strong);
+    --el-border-color-darker: var(--border-strong);
+
+    --el-fill-color: var(--surface-2);
+    --el-fill-color-light: var(--surface-2);
+    --el-fill-color-lighter: var(--surface-2);
+    --el-fill-color-blank: var(--surface);
+
+    --el-border-radius-base: var(--radius-sm);
+    --el-border-radius-small: 4px;
+    --el-font-family: var(--sans);
+    --el-font-size-base: 14px;
+
+    --el-box-shadow-light: var(--shadow-1);
+    --el-box-shadow: var(--shadow-2);
+    --el-box-shadow-lighter: var(--shadow-1);
+}
+
+/* 暗色：Element Plus 自身的 dark 变量挂在 html.dark 上，此处以同等/更高优先级覆盖 */
+:root[data-theme='dark'],
+html.dark {
+    /* 暗色下主色阶梯改为与黑混合 */
+    --el-color-primary: #6ea8fe;
+    --el-color-primary-light-3: #4d76b2;
+    --el-color-primary-light-5: #37547f;
+    --el-color-primary-light-7: #21324c;
+    --el-color-primary-light-8: #162233;
+    --el-color-primary-light-9: #0b1119;
+    --el-color-primary-dark-2: #8bbaff;
+
+    --el-color-success: var(--ok);
+    --el-color-warning: var(--warn);
+    --el-color-danger: var(--danger);
+    --el-color-error: var(--danger);
+    --el-color-info: var(--text-muted);
+
+    --el-bg-color: var(--surface);
+    --el-bg-color-page: var(--canvas);
+    --el-bg-color-overlay: var(--surface-2);
+
+    --el-border-color: var(--border);
+    --el-border-color-light: var(--border);
+    --el-border-color-lighter: var(--border);
+    --el-border-color-extra-light: var(--border);
+    --el-border-color-dark: var(--border-strong);
+    --el-border-color-darker: var(--border-strong);
+
+    --el-fill-color: var(--surface-2);
+    --el-fill-color-light: var(--surface-2);
+    --el-fill-color-lighter: var(--surface-2);
+    --el-fill-color-blank: var(--surface);
+
+    --el-text-color-primary: var(--text);
+    --el-text-color-regular: var(--text-2);
+    --el-text-color-secondary: var(--text-muted);
+    --el-text-color-placeholder: var(--text-muted);
+}
+
+/* ---------------- 组件细化 ---------------- */
+
+/* 表格：表头用次级底、行悬停用主色极浅底，与整体"灰阶为底"一致 */
+.el-table {
+    --el-table-border-color: var(--border);
+    --el-table-header-bg-color: var(--surface-2);
+    --el-table-header-text-color: var(--text-2);
+    --el-table-text-color: var(--text);
+    --el-table-row-hover-bg-color: var(--accent-soft);
+    --el-table-bg-color: var(--surface);
+    --el-table-tr-bg-color: var(--surface);
+}
+
+.el-table th.el-table__cell {
+    font-weight: 600;
+    letter-spacing: .02em;
+}
+
+.el-table .cell {
+    line-height: 1.55;
+}
+
+/* 表头与吸顶条一致：细线分隔，不用重边框 */
+.el-table--border .el-table__inner-wrapper::after,
+.el-table--border::after,
+.el-table--border::before {
+    background-color: var(--border);
+}
+
+/* 卡片：细描边 + 克制的阴影，不用 Element 默认的纯白大平面 */
+.el-card {
+    --el-card-border-color: var(--border);
+    --el-card-bg-color: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-1);
+}
+
+/* 按钮：主按钮用主色实底；次按钮描边更细，避免页面被按钮边框切碎 */
+.el-button {
+    font-weight: 500;
+}
+
+.el-button--primary {
+    --el-button-bg-color: var(--accent);
+    --el-button-border-color: var(--accent);
+    --el-button-hover-bg-color: var(--accent-hover);
+    --el-button-hover-border-color: var(--accent-hover);
+    --el-button-active-bg-color: var(--accent-hover);
+    --el-button-active-border-color: var(--accent-hover);
+}
+
+/* 标签/徽标：默认给中性底，语义由内容决定 */
+.el-tag {
+    --el-tag-border-radius: var(--radius-sm);
+    font-family: var(--mono);
+}
+
+/* 分页：与表格同宽，右对齐 */
+.el-pagination {
+    --el-pagination-button-bg-color: var(--surface);
+    --el-pagination-hover-color: var(--accent);
+    justify-content: flex-end;
+    margin-top: var(--sp-4);
+}
+
+/* 弹层：统一圆角与阴影 */
+.el-message {
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-2);
+}
+
+.el-tooltip__popper,
+.el-popper {
+    border-radius: var(--radius-sm) !important;
+}
+
+/* 输入类控件：描边用更明确的 --input-border，聚焦时不加粗导致抖动 */
+.el-input__wrapper,
+.el-textarea__inner {
+    box-shadow: 0 0 0 1px var(--input-border) inset;
+}
+
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus {
+    box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+/* =========================================================================
+   语义色的整条阶梯
+   -------------------------------------------------------------------------
+   只改 --el-color-success 之类的基色是不够的：el-tag / el-message / el-button
+   的浅底与悬停色取的是 --el-color-{type}-light-{3,5,7,8,9}，不覆盖的话这些组件
+   仍会渲染 Element Plus 默认的浅绿/浅橙底，和本项目配色割裂。
+   这里按 Element Plus 自己的混色公式补齐（light-N = N*10% 混合色 + 其余基色）。
+   用 color-mix 而非写死 hex：基色变化时阶梯自动跟随。
+   ========================================================================= */
+
+:root {
+    --el-color-success-light-3: color-mix(in srgb, #ffffff 30%, var(--el-color-success));
+    --el-color-success-light-5: color-mix(in srgb, #ffffff 50%, var(--el-color-success));
+    --el-color-success-light-7: color-mix(in srgb, #ffffff 70%, var(--el-color-success));
+    --el-color-success-light-8: color-mix(in srgb, #ffffff 80%, var(--el-color-success));
+    --el-color-success-light-9: color-mix(in srgb, #ffffff 90%, var(--el-color-success));
+    --el-color-success-dark-2: color-mix(in srgb, #000000 20%, var(--el-color-success));
+
+    --el-color-warning-light-3: color-mix(in srgb, #ffffff 30%, var(--el-color-warning));
+    --el-color-warning-light-5: color-mix(in srgb, #ffffff 50%, var(--el-color-warning));
+    --el-color-warning-light-7: color-mix(in srgb, #ffffff 70%, var(--el-color-warning));
+    --el-color-warning-light-8: color-mix(in srgb, #ffffff 80%, var(--el-color-warning));
+    --el-color-warning-light-9: color-mix(in srgb, #ffffff 90%, var(--el-color-warning));
+    --el-color-warning-dark-2: color-mix(in srgb, #000000 20%, var(--el-color-warning));
+
+    --el-color-danger-light-3: color-mix(in srgb, #ffffff 30%, var(--el-color-danger));
+    --el-color-danger-light-5: color-mix(in srgb, #ffffff 50%, var(--el-color-danger));
+    --el-color-danger-light-7: color-mix(in srgb, #ffffff 70%, var(--el-color-danger));
+    --el-color-danger-light-8: color-mix(in srgb, #ffffff 80%, var(--el-color-danger));
+    --el-color-danger-light-9: color-mix(in srgb, #ffffff 90%, var(--el-color-danger));
+    --el-color-danger-dark-2: color-mix(in srgb, #000000 20%, var(--el-color-danger));
+
+    /* error 与 danger 同值，但 Element Plus 两套变量都会用，必须同步 */
+    --el-color-error-light-3: var(--el-color-danger-light-3);
+    --el-color-error-light-5: var(--el-color-danger-light-5);
+    --el-color-error-light-7: var(--el-color-danger-light-7);
+    --el-color-error-light-8: var(--el-color-danger-light-8);
+    --el-color-error-light-9: var(--el-color-danger-light-9);
+    --el-color-error-dark-2: var(--el-color-danger-dark-2);
+
+    --el-color-info-light-3: color-mix(in srgb, #ffffff 30%, var(--el-color-info));
+    --el-color-info-light-5: color-mix(in srgb, #ffffff 50%, var(--el-color-info));
+    --el-color-info-light-7: color-mix(in srgb, #ffffff 70%, var(--el-color-info));
+    --el-color-info-light-8: color-mix(in srgb, #ffffff 80%, var(--el-color-info));
+    --el-color-info-light-9: color-mix(in srgb, #ffffff 90%, var(--el-color-info));
+    --el-color-info-dark-2: color-mix(in srgb, #000000 20%, var(--el-color-info));
+}
+
+/* 暗色：混色底换成 Element Plus 在暗色下的背景色 #141414，dark-2 反过来混白 */
+:root[data-theme='dark'],
+html.dark {
+    --el-color-success-light-3: color-mix(in srgb, #141414 30%, var(--el-color-success));
+    --el-color-success-light-5: color-mix(in srgb, #141414 50%, var(--el-color-success));
+    --el-color-success-light-7: color-mix(in srgb, #141414 70%, var(--el-color-success));
+    --el-color-success-light-8: color-mix(in srgb, #141414 80%, var(--el-color-success));
+    --el-color-success-light-9: color-mix(in srgb, #141414 90%, var(--el-color-success));
+    --el-color-success-dark-2: color-mix(in srgb, #ffffff 20%, var(--el-color-success));
+
+    --el-color-warning-light-3: color-mix(in srgb, #141414 30%, var(--el-color-warning));
+    --el-color-warning-light-5: color-mix(in srgb, #141414 50%, var(--el-color-warning));
+    --el-color-warning-light-7: color-mix(in srgb, #141414 70%, var(--el-color-warning));
+    --el-color-warning-light-8: color-mix(in srgb, #141414 80%, var(--el-color-warning));
+    --el-color-warning-light-9: color-mix(in srgb, #141414 90%, var(--el-color-warning));
+    --el-color-warning-dark-2: color-mix(in srgb, #ffffff 20%, var(--el-color-warning));
+
+    --el-color-danger-light-3: color-mix(in srgb, #141414 30%, var(--el-color-danger));
+    --el-color-danger-light-5: color-mix(in srgb, #141414 50%, var(--el-color-danger));
+    --el-color-danger-light-7: color-mix(in srgb, #141414 70%, var(--el-color-danger));
+    --el-color-danger-light-8: color-mix(in srgb, #141414 80%, var(--el-color-danger));
+    --el-color-danger-light-9: color-mix(in srgb, #141414 90%, var(--el-color-danger));
+    --el-color-danger-dark-2: color-mix(in srgb, #ffffff 20%, var(--el-color-danger));
+
+    --el-color-error-light-3: var(--el-color-danger-light-3);
+    --el-color-error-light-5: var(--el-color-danger-light-5);
+    --el-color-error-light-7: var(--el-color-danger-light-7);
+    --el-color-error-light-8: var(--el-color-danger-light-8);
+    --el-color-error-light-9: var(--el-color-danger-light-9);
+    --el-color-error-dark-2: var(--el-color-danger-dark-2);
+
+    --el-color-info-light-3: color-mix(in srgb, #141414 30%, var(--el-color-info));
+    --el-color-info-light-5: color-mix(in srgb, #141414 50%, var(--el-color-info));
+    --el-color-info-light-7: color-mix(in srgb, #141414 70%, var(--el-color-info));
+    --el-color-info-light-8: color-mix(in srgb, #141414 80%, var(--el-color-info));
+    --el-color-info-light-9: color-mix(in srgb, #141414 90%, var(--el-color-info));
+    --el-color-info-dark-2: color-mix(in srgb, #ffffff 20%, var(--el-color-info));
+}

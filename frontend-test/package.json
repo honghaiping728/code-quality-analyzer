@@ -3,11 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "用 jsdom 驱动控制台页面的集成测试，覆盖单元测试无法触达的前端交互",
+  "description": "用 Playwright 驱动真实浏览器跑控制台的端到端测试",
   "scripts": {
-    "test": "node drive.mjs"
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "shots": "node screenshots.mjs",
+    "install-browser": "playwright install --with-deps chromium",
+    "report": "playwright show-report"
   },
-  "dependencies": {
-    "jsdom": "^24.0.0"
+  "devDependencies": {
+    "@playwright/test": "^1.64.0"
   }
 }
