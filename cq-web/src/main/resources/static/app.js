@@ -110,6 +110,7 @@ function switchView(name) {
     if (name === 'issues') loadIssues();
     if (name === 'report') loadReport();
     if (name === 'rules') loadRules();
+    if (name === 'llm') loadLlmKeys();
 }
 
 document.getElementById('tabs').addEventListener('click', (event) => {
@@ -1010,6 +1011,90 @@ document.getElementById('ignoreForm').addEventListener('submit', async (event) =
         await loadIgnores();
     } catch (error) {
         toast(`添加失败：${error.message}`, 'error');
+    }
+});
+
+/* ---------------- 大模型配置 ---------------- */
+
+async function loadLlmKeys() {
+    const container = document.getElementById('llmKeyTable');
+    try {
+        const keys = await api('/api/llm/keys');
+        document.getElementById('llmKeyCount').textContent = `共 ${keys.length} 条`;
+        if (!keys.length) {
+            container.innerHTML = '<p class="hint">暂无配置，填写下方表单即可接入真实模型</p>';
+            return;
+        }
+        // 启用中的配置排在最前（后端已排序），这里只标状态、不给它「启用」按钮
+        const rows = keys.map((entry) => `
+            <tr>
+                <td class="cell-rule">${esc(entry.name)}</td>
+                <td class="cell-file"><span class="clip" title="${esc(entry.baseUrl)}">${esc(entry.baseUrl)}</span></td>
+                <td>${esc(entry.model)}</td>
+                <td class="hint" style="margin:0">${esc(entry.keyPreview)}</td>
+                <td>${entry.active ? '<span class="badge badge-ok">启用中</span>' : ''}</td>
+                <td>
+                    ${entry.active ? '' : `<button class="btn" data-activate-id="${entry.id}">启用</button>`}
+                    <button class="btn" data-delete-id="${entry.id}">删除</button>
+                </td>
+            </tr>`).join('');
+        container.innerHTML = `
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>名称</th><th>接口地址</th><th>模型</th><th>密钥</th><th>状态</th><th></th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+        container.querySelectorAll('[data-activate-id]').forEach((button) => {
+            button.addEventListener('click', async () => {
+                button.disabled = true;
+                try {
+                    await api(`/api/llm/keys/${button.dataset.activateId}/activate`, { method: 'PATCH' });
+                    await loadLlmKeys();
+                    await loadStatus();
+                    toast('已启用，下一次调用即生效', 'success');
+                } catch (error) {
+                    button.disabled = false;
+                    toast(`启用失败：${error.message}`, 'error');
+                }
+            });
+        });
+        container.querySelectorAll('[data-delete-id]').forEach((button) => {
+            button.addEventListener('click', async () => {
+                button.disabled = true;
+                try {
+                    await api(`/api/llm/keys/${button.dataset.deleteId}`, { method: 'DELETE' });
+                    await loadLlmKeys();
+                    await loadStatus();
+                } catch (error) {
+                    button.disabled = false;
+                    toast(`删除失败：${error.message}`, 'error');
+                }
+            });
+        });
+    } catch (error) {
+        container.innerHTML = `<p class="empty">加载失败：${esc(error.message)}</p>`;
+    }
+}
+
+document.getElementById('llmKeyForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+        const saved = await api('/api/llm/keys', {
+            method: 'POST',
+            body: JSON.stringify({
+                name: document.getElementById('llmKeyName').value.trim(),
+                baseUrl: document.getElementById('llmKeyBaseUrl').value.trim(),
+                model: document.getElementById('llmKeyModel').value.trim(),
+                apiKey: document.getElementById('llmKeySecret').value.trim(),
+            }),
+        });
+        document.getElementById('llmKeyForm').reset();
+        await loadLlmKeys();
+        await loadStatus();
+        toast(saved.active ? `「${saved.name}」已保存并启用` : `「${saved.name}」已保存`, 'success');
+    } catch (error) {
+        toast(`保存失败：${error.message}`, 'error');
     }
 });
 

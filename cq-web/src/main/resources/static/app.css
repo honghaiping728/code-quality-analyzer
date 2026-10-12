@@ -661,6 +661,13 @@ tr.is-selected {
     font-family: var(--mono);
 }
 
+/* 与 .toggle.is-on 同一套「开启」语义色 */
+.badge-ok {
+    background: var(--ok);
+    border-color: var(--ok);
+    color: var(--paper);
+}
+
 /* ---------------- 详情 ---------------- */
 
 .detail-bar { margin-bottom: 12px; }

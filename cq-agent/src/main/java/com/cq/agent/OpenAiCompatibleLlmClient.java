@@ -57,6 +57,11 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
     }
 
     @Override
+    public boolean offline() {
+        return false;
+    }
+
+    @Override
     public LlmResponse complete(String systemPrompt, String userPrompt) {
         long startedAt = System.currentTimeMillis();
         if (!available()) {

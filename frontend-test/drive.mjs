@@ -193,6 +193,52 @@ $('detailBack').dispatchEvent(new window.Event('click', { bubbles: true }));
 await sleep(1500);
 check('返回按钮切回问题列表', $('view-issues')?.classList.contains('is-active') === true);
 
+// ---------- 10. 大模型配置（API Key 管理） ----------
+console.log('\n【大模型配置】');
+const PROBE_NAME = '__fe_probe__';
+const PROBE_SECRET = 'sk-probe-000011112222';
+
+// 用例跑在真实库上：先清理同名残留，保证可重复执行
+const keysBefore = (await (await fetch(BASE + '/api/llm/keys')).json()).data || [];
+for (const row of keysBefore) {
+    if (row.name === PROBE_NAME) {
+        await fetch(`${BASE}/api/llm/keys/${row.id}`, { method: 'DELETE' });
+    }
+}
+
+window.switchView('llm');
+check('切到大模型配置页', $('view-llm')?.classList.contains('is-active') === true);
+await sleep(800);
+
+$('llmKeyName').value = PROBE_NAME;
+$('llmKeyBaseUrl').value = 'https://api.deepseek.com/v1';
+$('llmKeyModel').value = 'deepseek-chat';
+$('llmKeySecret').value = PROBE_SECRET;
+$('llmKeyForm').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+await sleep(1500);
+
+const llmTableText = $('llmKeyTable').textContent || '';
+check('新增的配置出现在表格中', llmTableText.includes(PROBE_NAME));
+check('密钥列显示掩码而非原文',
+    llmTableText.includes('sk-…2222') && !llmTableText.includes(PROBE_SECRET),
+    llmTableText.includes(PROBE_SECRET) ? '密钥原文出现在页面上' : '');
+check('保存后表单已重置', $('llmKeyName').value === '');
+
+const keyList = (await (await fetch(BASE + '/api/llm/keys')).json()).data || [];
+const activeCount = keyList.filter((k) => k.active).length;
+const badgeCount = window.document.querySelectorAll('#llmKeyTable .badge-ok').length;
+check('启用徽标与接口一致且至多一条',
+    badgeCount === activeCount && activeCount <= 1,
+    `接口 ${activeCount} 条启用 / 页面 ${badgeCount} 个徽标`);
+
+const probeRow = Array.from(window.document.querySelectorAll('#llmKeyTable tbody tr'))
+    .find((tr) => tr.textContent.includes(PROBE_NAME));
+check('探针行带删除按钮', !!probeRow?.querySelector('[data-delete-id]'));
+probeRow?.querySelector('[data-delete-id]')
+    .dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+await sleep(1500);
+check('删除后表格不再包含该配置', !($('llmKeyTable').textContent || '').includes(PROBE_NAME));
+
 // ---------- 汇总 ----------
 const failed = results.filter((r) => !r.ok);
 console.log(`\n=== ${results.length - failed.length}/${results.length} 通过 ===`);

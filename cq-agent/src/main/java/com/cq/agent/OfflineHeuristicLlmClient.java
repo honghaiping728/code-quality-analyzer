@@ -25,6 +25,11 @@ public class OfflineHeuristicLlmClient implements LlmClient {
     }
 
     @Override
+    public boolean offline() {
+        return true;
+    }
+
+    @Override
     public LlmResponse complete(String systemPrompt, String userPrompt) {
         long startedAt = System.currentTimeMillis();
         String ruleId = extract(userPrompt, "规则ID：");
@@ -35,8 +40,8 @@ public class OfflineHeuristicLlmClient implements LlmClient {
 
                 修复方向：%s
 
-                （说明：当前为离线启发式结果，配置 cq.llm.api-key 后将由大模型给出
-                结合上下文的成因解释与修复代码。）
+                （说明：当前为离线启发式结果，在控制台「大模型配置」页添加并启用 API Key，
+                或配置 cq.llm.api-key 后，将由大模型给出结合上下文的成因解释与修复代码。）
                 """.formatted(
                 message.isEmpty() ? "该处代码违反了既定规则。" : message,
                 ruleId.isEmpty() ? "未知规则" : ruleId,

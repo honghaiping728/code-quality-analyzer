@@ -44,11 +44,11 @@ Git 仓库接入 → 增量代码获取 → AST 解析 → 分析引擎 → 问�
 | `cq-parser` | AST 解析 | JavaParser 解析源码，提取类型/方法/参数/返回类型/调用图/圈复杂度 | ✅ 已实现 |
 | `cq-rule` | 规则引擎 | 四维确定性规则检查，42 条规则 + 局部类型索引 + 结果去重排序 | ✅ 已实现 |
 | `cq-scan` | 扫描调度 | 扫描任务编排、状态机、问题落库、查询与状态更新 | ✅ 已实现 |
-| `cq-agent` | Code Agent | LLM 客户端抽象（OpenAI 兼容 / 离线兜底）+ 语义确认与成因分析 | ✅ 已实现 |
+| `cq-agent` | Code Agent | LLM 客户端抽象（OpenAI 兼容 / 离线兜底）+ 运行时可切换的密钥配置 + 语义确认与成因分析 | ✅ 已实现 |
 | `cq-suggestion` | 修复建议 | 确定性模板 + Code Agent 两层生成、Diff 构造、采纳/误报反馈 | ✅ 已实现 |
 | `cq-report` | 报告与趋势 | 报告生成、问题密度/类别分布统计、跨任务质量趋势 | ✅ 已实现 |
 | `cq-admin` | 规则与阈值管理 | 规则启停、阈值配置、忽略列表、反馈统计 | ✅ 已实现 |
-| `cq-web` | 启动模块 | Spring Boot 启动入口、34 个 REST 接口、黑白简约前端控制台 | ✅ 已实现 |
+| `cq-web` | 启动模块 | Spring Boot 启动入口、38 个 REST 接口、黑白简约前端控制台 | ✅ 已实现 |
 
 > 状态说明：✅ 已实现并验证 · 🟡 骨架可运行 · ⬜ 待开发
 
@@ -91,9 +91,9 @@ Git 仓库接入 → 增量代码获取 → AST 解析 → 分析引擎 → 问�
 
 **测试基线**：
 
-- 后端 JUnit 5 共 170 个用例 —— AST 解析（类型/方法/调用图/圈复杂度/容错）、
+- 后端 JUnit 5 共 181 个用例 —— AST 解析（类型/方法/调用图/圈复杂度/容错）、
   42 条规则每条配「正例命中 + 负例不误报」（负例是重点）、修复模板匹配、上传内容校验、
-  仓库地址解析与在线文件筛选
+  仓库地址解析与在线文件筛选、大模型配置的优先级与回退（含密钥掩码边界）
 - 前端 `frontend-test/` 用 jsdom 驱动真实页面，覆盖单元测试触达不到的交互
   （不含在 `mvn test` 中，需先启动服务再 `npm test`）
 
@@ -109,7 +109,7 @@ mysql -uroot -p < docs/sql/schema.sql
 docker exec -i mysql mysql -uroot -p123456 --default-character-set=utf8mb4 < docs/sql/schema.sql
 ```
 
-脚本会创建 `code_quality` 库、14 张表，并写入默认阈值配置与管理员账号。
+脚本会创建 `code_quality` 库、15 张表，并写入默认阈值配置与管理员账号。
 数据库连接参数在 `cq-web/src/main/resources/application.yml` 中配置。
 
 ### 2. 构建与启动
@@ -118,7 +118,7 @@ docker exec -i mysql mysql -uroot -p123456 --default-character-set=utf8mb4 < doc
 # 全量构建（首次会下载依赖）
 mvn clean install
 
-# 后端测试（170 个用例）
+# 后端测试（181 个用例）
 mvn test
 
 # 前端集成测试（需先启动服务，见 frontend-test/README.md）
@@ -134,13 +134,18 @@ java -jar cq-web/target/cq-web-0.1.0-SNAPSHOT.jar
 
 浏览器访问 **http://localhost:8080/** ，在「概览」页选择一种代码来源发起审查 —— 输入服务器目录路径、
 上传本地 `.java` 文件、直接粘贴一段代码，或输入一个 GitHub 仓库地址；随后在「问题列表」
-「问题详情」「报告与趋势」「规则配置」中查看结果。
+「问题详情」「报告与趋势」「规则配置」中查看结果，在「大模型配置」中接入或切换大模型。
 
 ### 4. 配置大模型（可选）
 
 默认未配置 API Key 时，系统使用**离线启发式**实现，扫描、建议生成、报告链路均可完整运行，
-但成因分析为基于规则元数据的确定性模板。接入真实模型只需在 `application.yml` 中填入
-任意 OpenAI 兼容服务的密钥：
+但成因分析为基于规则元数据的确定性模板。
+
+接入真实模型推荐直接在控制台操作：打开 **「大模型配置」页**，填写名称、接口地址、模型与密钥并保存，
+启用中的配置**立即生效、无需重启**；可保存多条（如 DeepSeek / 通义 / Kimi / 智谱）并在页面上随时
+切换或删除。密钥明文存于本地数据库，接口只返回掩码（如 `sk-…cdef`）。
+
+也可以在 `application.yml` / 环境变量中兜底配置，其优先级低于控制台配置：
 
 ```yaml
 cq:
@@ -149,6 +154,10 @@ cq:
     api-key: sk-xxxx
     model: deepseek-chat
 ```
+
+运行时优先级为 **启用中的数据库配置 > application.yml > 离线启发式**：数据库配置被删除或字段不完整、
+乃至数据库不可用时，都会逐级回退，不会让建议生成整体失败；调用失败也不静默降级，错误原因写入
+`llm_call_log` 供排查。
 
 ### 四种代码来源
 
@@ -192,6 +201,10 @@ GitHub 仓库扫描同样**不落盘**：源码经 GitHub 接口按需拉取到�
 | `GET /api/reports/{taskId}` | 获取任务报告 |
 | `GET /api/reports/trend` | 质量趋势 |
 | `GET /api/rules` | 规则列表与启停状态 |
+| `GET /api/llm/keys` | 大模型 API Key 配置列表（密钥为掩码） |
+| `POST /api/llm/keys` | 新增配置并立即生效（表中首条自动启用） |
+| `PATCH /api/llm/keys/{id}/activate` | 启用某条配置（立即生效，无需重启） |
+| `DELETE /api/llm/keys/{id}` | 删除配置 |
 | `POST /api/ast/parse` | 直接解析源码返回 AST 摘要 |
 
 ### 直接使用 AST 解析能力（`cq-parser`）
@@ -227,7 +240,7 @@ summary.getParseErrors();                   // 语法错误（不抛异常，返
 | 后端功能模块 | 8 个：仓库接入、扫描调度、AST 解析、规则引擎、Code Agent 分析、修复建议、报告趋势、规则与阈值管理 |
 | 代码来源 | 4 种：服务器目录、浏览器上传 `.java` 文件、直接粘贴代码、GitHub 仓库地址（在线直取） |
 | 规则模板库 | 4 类维度合计不少于 40 条（Bug / 安全 / 性能 / 规范各 10 条以上） |
-| 数据库表规模 | 约 14 张（仓库、扫描任务、文件快照、问题记录、修复建议、采纳反馈、报告、规则配置等） |
+| 数据库表规模 | 约 15 张（仓库、扫描任务、文件快照、问题记录、修复建议、采纳反馈、报告、规则配置、大模型密钥配置等） |
 | REST 接口规模 | 约 28 个 |
 | 前端页面 | 约 7 个（仓库管理、扫描任务、问题列表与详情、Diff 修复视图、质量报告、趋势图、规则配置） |
 | 评测集建设 | 含缺陷样例不少于 200 个（覆盖四类问题的正例与负例），用于精确率 / 召回率评估 |
@@ -290,7 +303,7 @@ summary.getParseErrors();                   // 语法错误（不抛异常，返
 code-quality-analyzer/
 ├── pom.xml                   # 父 POM，统一管理版本（Java 21 / Spring Boot 3.4.4）
 ├── docs/
-│   └── sql/schema.sql        # 数据库 Schema（14 张表 + 初始阈值与账号）
+│   └── sql/schema.sql        # 数据库 Schema（15 张表 + 初始阈值与账号）
 ├── cq-common/                # 公共模块：Issue 问题对象、Result 统一返回、ast 摘要模型、model 数据模型
 ├── cq-repo/                  # Git 仓库接入（JGit）
 ├── cq-scan/                  # 扫描调度与问题落库

@@ -24,6 +24,7 @@
             <button class="tab" data-view="detail">问题详情</button>
             <button class="tab" data-view="report">报告与趋势</button>
             <button class="tab" data-view="rules">规则配置</button>
+            <button class="tab" data-view="llm">大模型配置</button>
         </nav>
         <div class="system-status" id="systemStatus">
             <span class="dot" id="statusDot"></span>
@@ -231,6 +232,26 @@
                 <input type="text" id="ignorePattern" placeholder="路径 glob，如 **/test/**">
                 <input type="text" id="ignoreReason" placeholder="忽略原因">
                 <button type="submit" class="btn">添加</button>
+            </form>
+        </div>
+    </section>
+
+    <!-- ============ 大模型配置 ============ -->
+    <section class="view" id="view-llm">
+        <div class="panel">
+            <h2>大模型配置 <span class="count" id="llmKeyCount"></span></h2>
+            <p class="hint">
+                接入任意 OpenAI 兼容服务（DeepSeek / 通义 / Kimi / 智谱等）：填写名称、接口地址、模型与密钥后保存。
+                启用中的配置立即生效、无需重启；没有启用项时回退到 application.yml，仍无密钥则使用离线启发式实现。
+                密钥明文存于本地数据库，接口只返回掩码。
+            </p>
+            <div id="llmKeyTable"><span class="hint">加载中…</span></div>
+            <form class="scan-form" id="llmKeyForm">
+                <input type="text" id="llmKeyName" placeholder="配置名称，如 DeepSeek 生产">
+                <input type="text" id="llmKeyBaseUrl" placeholder="接口地址，如 https://api.deepseek.com/v1">
+                <input type="text" id="llmKeyModel" placeholder="模型名，如 deepseek-chat">
+                <input type="password" id="llmKeySecret" placeholder="API Key，如 sk-xxxx" autocomplete="off">
+                <button type="submit" class="btn">保存</button>
             </form>
         </div>
     </section>

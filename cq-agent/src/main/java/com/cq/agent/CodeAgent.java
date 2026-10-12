@@ -70,7 +70,7 @@ public class CodeAgent {
 
         AgentResult result = new AgentResult();
         result.setModel(response.getModel());
-        result.setFromLlm(!(llmClient instanceof OfflineHeuristicLlmClient));
+        result.setFromLlm(!llmClient.offline());
         if (!response.isSuccess()) {
             // 调用失败时保留规则引擎的原始判定，不因模型不可用而丢结果
             log.warn("Code Agent 调用失败，沿用规则引擎判定: {}", response.getErrorMessage());

@@ -15,6 +15,14 @@ public interface LlmClient {
     boolean available();
 
     /**
+     * 是否为离线兜底实现
+     * <p>
+     * 用于判断结果来源（如修复建议标注 LLM / TEMPLATE）。之所以做成接口方法而不是让调用方
+     * {@code instanceof}：客户端可能被装饰（运行时切换配置），类型判断会失真。
+     */
+    boolean offline();
+
+    /**
      * 发起一次对话补全
      * @param systemPrompt 系统提示词
      * @param userPrompt 用户提示词

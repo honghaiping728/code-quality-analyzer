@@ -23,6 +23,7 @@ CREATE DATABASE IF NOT EXISTS `code_quality`
 USE `code_quality`;
 
 -- 按依赖倒序清理，便于重复执行
+DROP TABLE IF EXISTS `llm_api_key`;
 DROP TABLE IF EXISTS `llm_call_log`;
 DROP TABLE IF EXISTS `suggestion_feedback`;
 DROP TABLE IF EXISTS `fix_suggestion`;
@@ -335,6 +336,26 @@ CREATE TABLE `llm_call_log` (
     KEY `idx_llm_scene` (`scene`, `create_time`),
     CONSTRAINT `fk_llm_task` FOREIGN KEY (`task_id`) REFERENCES `scan_task` (`id`) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = 'LLM 调用日志';
+
+-- -----------------------------------------------------------------------------
+-- 15. llm_api_key —— 大模型 API Key 配置（控制台「大模型配置」页维护）
+--
+-- 密钥明文存储（本地单机工具的取舍，与 repo.credential 一致），接口只返回掩码；
+-- 同一时刻至多一条 active = 1，运行时优先级：启用中的数据库配置 > application.yml > 离线启发式。
+-- -----------------------------------------------------------------------------
+CREATE TABLE `llm_api_key` (
+    `id`          BIGINT       NOT NULL AUTO_INCREMENT,
+    `name`        VARCHAR(128) NOT NULL                COMMENT '配置名称，如 DeepSeek 生产',
+    `base_url`    VARCHAR(256) NOT NULL                COMMENT 'OpenAI 兼容接口地址',
+    `api_key`     VARCHAR(512) NOT NULL                COMMENT '密钥，仅存本地库，接口只返回掩码',
+    `model`       VARCHAR(128) NOT NULL                COMMENT '模型名',
+    `active`      TINYINT(1)   NOT NULL DEFAULT 0      COMMENT '是否当前启用，全表至多一条为 1',
+    `create_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `update_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_llm_api_key_name` (`name`),
+    KEY `idx_llm_api_key_active` (`active`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '大模型 API Key 配置';
 
 -- =============================================================================
 -- 初始数据：规则阈值默认值
