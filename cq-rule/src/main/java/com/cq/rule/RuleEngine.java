@@ -2,6 +2,7 @@ package com.cq.rule;
 
 import com.cq.common.Issue;
 import com.cq.common.Severity;
+import com.cq.common.lang.Language;
 import com.cq.common.model.RuleConfigSet;
 import com.cq.parser.ParsedFile;
 import org.slf4j.Logger;
@@ -76,11 +77,15 @@ public class RuleEngine {
         }
         RuleContext ctx = new RuleContext(file, effective);
         int cap = effective.getThresholds().getMaxFindingsPerRulePerFile();
+        Language language = file.getLanguage();
         List<Issue> collected = new ArrayList<>();
 
         for (Rule rule : rules) {
             if (!effective.isEnabled(rule.id())) {
                 continue;   // 禁用的规则直接不执行，这是最省的一次过滤
+            }
+            if (language != null && !rule.languages().contains(language)) {
+                continue;   // 语言不匹配：Java 的 AST 规则不该在 YAML 上跑，反之亦然
             }
             List<Issue> found;
             try {

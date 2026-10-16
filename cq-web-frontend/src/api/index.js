@@ -54,7 +54,7 @@ export const scanApi = {
 
     /**
      * 上传文件：必须绕过 request()——手动设置 Content-Type 会破坏 multipart 边界。
-     * 返回整个信封而不是 data，调用方需要用到 message（跳过的非 Java 文件提示）。
+     * 返回整个信封而不是 data，调用方需要用到 message（跳过的不支持文件提示）。
      */
     async upload(files) {
         const form = new FormData();

@@ -6,7 +6,7 @@ import { UploadFilled } from '@element-plus/icons-vue';
 import MetricStrip from '../components/MetricStrip.vue';
 import TypeDot from '../components/TypeDot.vue';
 import { scanApi, systemApi } from '../api';
-import { TYPE_LABELS, TYPE_ORDER, formatTime } from '../constants';
+import { SUPPORTED_EXTENSIONS, TYPE_LABELS, TYPE_ORDER, formatTime } from '../constants';
 import { toast } from '../composables/useToast';
 import { useStatus } from '../composables/useStatus';
 
@@ -125,14 +125,14 @@ function submitPath() {
 
 function submitUpload() {
     if (!files.value.length) {
-        flash('请先选择要审查的 .java 文件', true);
+        flash('请先选择要审查的文件', true);
         return;
     }
     const chosen = [...files.value];
     flash(`已上传 ${chosen.length} 个文件，正在解析与检查…`);
     submit(async () => {
         const body = await scanApi.upload(chosen);
-        // 后端会说明跳过了哪些非 Java 文件，这条信息不该被吞掉
+        // 后端会说明跳过了哪些不支持的文件，这条信息不该被吞掉
         if (body.message && body.message !== 'success') {
             flash(body.message);
         }
@@ -229,7 +229,7 @@ onMounted(() => {
 
                 <!-- 服务器目录 -->
                 <div class="source-pane" :class="{ 'is-active': source === 'path' }" data-test="pane-path">
-                    <p class="hint">输入服务器上可访问的目录或单个 .java 文件路径。默认跳过 target、generated 目录。</p>
+                    <p class="hint">输入服务器上可访问的目录或单个文件路径。默认跳过 target、generated、node_modules 等目录。</p>
                     <form class="scan-form" @submit.prevent="submitPath">
                         <el-input
                             v-model="form.path"
@@ -250,19 +250,20 @@ onMounted(() => {
                 <!-- 上传文件 -->
                 <div class="source-pane" :class="{ 'is-active': source === 'upload' }" data-test="pane-upload">
                     <p class="hint">
-                        文件只在内存中解析、不落盘；文件名不参与任何文件系统操作，非 .java 会被拒绝并明确列出。
+                        支持 Java、各类配置与脚本、前端源码等文本文件；文件只在内存中解析、不落盘，
+                        文件名不参与任何文件系统操作，不支持的扩展名会被拒绝并明确列出。
                         一次最多 50 个、单文件不超过 2 MB。
                     </p>
                     <form class="scan-form scan-form-stack" @submit.prevent="submitUpload">
                         <label class="dropzone">
                             <el-icon class="dropzone-icon"><UploadFilled /></el-icon>
-                            <span class="dropzone-title">点击选择或拖拽 .java 文件到这里</span>
+                            <span class="dropzone-title">点击选择或拖拽文件到这里</span>
                             <span class="dropzone-hint">
-                                {{ files.length ? `已选择 ${files.length} 个文件` : '支持多选' }}
+                                {{ files.length ? `已选择 ${files.length} 个文件` : '支持多选（拖拽不限类型，由服务端判定）' }}
                             </span>
                             <input
                                 type="file"
-                                accept=".java"
+                                :accept="SUPPORTED_EXTENSIONS.join(',')"
                                 multiple
                                 data-test="upload-files"
                                 @change="onFileChange"
@@ -276,15 +277,21 @@ onMounted(() => {
 
                 <!-- 粘贴代码 -->
                 <div class="source-pane" :class="{ 'is-active': source === 'snippet' }" data-test="pane-snippet">
-                    <p class="hint">直接粘贴 Java 代码，适合快速检查一段片段。</p>
+                    <p class="hint">
+                        粘贴任意一段代码或配置。语言按文件名的扩展名识别，不填则按 Java 处理。
+                    </p>
                     <form class="scan-form scan-form-stack" @submit.prevent="submitSnippet">
-                        <el-input v-model="form.snippetName" placeholder="文件名（可选），如 Demo.java" data-test="snippet-name" />
+                        <el-input
+                            v-model="form.snippetName"
+                            placeholder="文件名（可选，按扩展名识别语言），如 Demo.java / config.yml"
+                            data-test="snippet-name"
+                        />
                         <el-input
                             v-model="form.snippetSource"
                             type="textarea"
                             :rows="12"
                             spellcheck="false"
-                            placeholder="在此粘贴 Java 代码…"
+                            placeholder="在此粘贴要审查的代码或配置…"
                             data-test="snippet-source"
                         />
                         <el-button type="primary" native-type="submit" :loading="busy" data-test="snippet-button">

@@ -15,6 +15,15 @@ import com.github.javaparser.ast.Node;
  */
 public abstract class AbstractRule implements Rule {
 
+    /**
+     * 问题描述的最大长度
+     * <p>
+     * 数据库 {@code issue.message} 是 VARCHAR(512)，MySQL 严格模式下超长会直接拒绝插入，
+     * 而落库失败会被上层判为整个任务失败 —— 一条啰嗦的解析错误消息就能让整次扫描白跑。
+     * 截到 400 留足余量。
+     */
+    private static final int MAX_MESSAGE_CHARS = 400;
+
     private final String id;
     private final String name;
     private final IssueType type;
@@ -128,11 +137,26 @@ public abstract class AbstractRule implements Rule {
         issue.setSeverity((severityOverride == null ? ctx.severityOf(this) : severityOverride).name());
         issue.setSource(IssueSource.RULE.name());
         issue.setConfidence(confidenceOverride == null ? ctx.confidenceOf(this) : confidenceOverride);
-        issue.setMessage(message);
+        issue.setMessage(truncate(message));
         issue.setSuggestion(suggestion);
         issue.setCodeSnippet(ctx.lineAt(line));
         issue.setStatus(IssueStatus.OPEN.name());
         return issue;
+    }
+
+    /**
+     * 截断过长的描述
+     * <p>
+     * 面向配置文件的规则会把解析器给出的原始报文拼进描述（如 XML 的 SAX 错误），
+     * 这类报文长度不可控，必须在构造命中的地方统一收敛。
+     * @param message 原始描述
+     * @return 截断后的描述
+     */
+    protected static String truncate(String message) {
+        if (message == null || message.length() <= MAX_MESSAGE_CHARS) {
+            return message;
+        }
+        return message.substring(0, MAX_MESSAGE_CHARS - 1) + "…";
     }
 
     /**
@@ -155,7 +179,7 @@ public abstract class AbstractRule implements Rule {
         issue.setSeverity(ctx.severityOf(this).name());
         issue.setSource(IssueSource.RULE.name());
         issue.setConfidence(ctx.confidenceOf(this));
-        issue.setMessage(message);
+        issue.setMessage(truncate(message));
         issue.setSuggestion(suggestion);
         issue.setCodeSnippet(ctx.lineAt(line));
         issue.setStatus(IssueStatus.OPEN.name());

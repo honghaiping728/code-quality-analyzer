@@ -7,8 +7,9 @@ import com.cq.common.model.RuleConfigProvider;
 import com.cq.common.model.RuleConfigSet;
 import com.cq.common.model.ScanFile;
 import com.cq.common.model.ScanTask;
-import com.cq.parser.AstParserService;
+import com.cq.common.lang.Language;
 import com.cq.parser.ParsedFile;
+import com.cq.parser.SourceParserRegistry;
 import com.cq.repo.GitHubRepoClient;
 import com.cq.rule.RuleEngine;
 import com.cq.scan.mapper.IssueMapper;
@@ -61,7 +62,13 @@ public class ScanService {
     private final GitHubRepoClient githubClient;
     private final int maxRepoFiles;
 
-    private final AstParserService parser = new AstParserService();
+    /**
+     * 解析器注册表
+     * <p>
+     * 与 {@code RuleEngine} 一样直接 new 而非注入 Spring Bean：cq-parser 刻意不依赖 Spring，
+     * 由上层决定是否纳入容器，这里跟随既有写法。
+     */
+    private final SourceParserRegistry parser = SourceParserRegistry.defaults();
     private final RuleEngine engine = new RuleEngine();
 
     /** 异步执行扫描，避免大仓库阻塞请求线程 */
@@ -111,6 +118,24 @@ public class ScanService {
 
     /** 单个源码单元的最大字符数 */
     public static final int MAX_SOURCE_CHARS = 2 * 1024 * 1024;
+
+    /** 受支持扩展名的提示文本，用于报错信息，由 {@link Language} 枚举实时生成 */
+    public static final String SUPPORTED_EXTENSIONS_HINT = describeSupportedExtensions();
+
+    private static String describeSupportedExtensions() {
+        TreeSet<String> extensions = new TreeSet<>();
+        for (Language language : Language.values()) {
+            for (String extension : language.extensions()) {
+                extensions.add("." + extension);
+            }
+            if (language == Language.DOCKERFILE) {
+                extensions.add("Dockerfile");
+            } else if (language == Language.MAKEFILE) {
+                extensions.add("Makefile");
+            }
+        }
+        return String.join("、", extensions);
+    }
 
     /**
      * 提交扫描任务并异步执行
@@ -288,9 +313,9 @@ public class ScanService {
             String baseSha = spec.incremental() ? resolveBase(task, ref, headSha) : null;
 
             List<String> paths = spec.incremental()
-                    ? githubClient.changedJavaPaths(ref, baseSha, headSha)
-                    : githubClient.javaPathsAt(ref, headSha);
-            List<SourceUnit> units = fetchUnits(ref, headSha, filterJavaPaths(paths, config, maxRepoFiles));
+                    ? githubClient.changedPaths(ref, baseSha, headSha)
+                    : githubClient.pathsAt(ref, headSha);
+            List<SourceUnit> units = fetchUnits(ref, headSha, filterSourcePaths(paths, config, maxRepoFiles));
 
             ScanTask done = analyzeUnits(task, units, config, startedAt);
 
@@ -336,7 +361,7 @@ public class ScanService {
             if (unit.isBlank()) {
                 continue;   // 空文件或空白粘贴，没有分析价值
             }
-            ParsedFile parsed = parser.parseDetailed(unit.content(), unit.displayPath());
+            ParsedFile parsed = parser.parse(unit.content(), unit.displayPath());
             List<Issue> issues = engine.analyze(parsed, config);
             for (Issue issue : issues) {
                 issue.setFilePath(unit.displayPath());
@@ -403,17 +428,32 @@ public class ScanService {
      * @return 源码单元列表
      */
     private List<SourceUnit> readSourceUnits(String targetPath, RuleConfigSet config) throws IOException {
-        List<Path> javaFiles = collectJavaFiles(targetPath, config);
-        List<SourceUnit> units = new ArrayList<>(javaFiles.size());
-        for (Path path : javaFiles) {
+        List<Path> sourceFiles = collectSourceFiles(targetPath, config);
+        List<SourceUnit> units = new ArrayList<>(sourceFiles.size());
+        for (Path path : sourceFiles) {
             try {
-                units.add(new SourceUnit(relativize(targetPath, path),
+                units.add(new SourceUnit(displayPathOf(targetPath, path),
                         java.nio.file.Files.readString(path)));
             } catch (IOException e) {
                 log.warn("文件读取失败，已跳过: {}", path, e);
             }
         }
         return units;
+    }
+
+    /**
+     * 扫描目标的展示路径
+     * <p>
+     * 单个文件作为扫描目标时，{@code Paths.get(p).relativize(p)} 得到的是**空路径**，
+     * 展示路径会变成空串。空串会让语言识别失败（→ 一个规则都不跑）、问题列表里的
+     * 文件列变成空白，是一处静默失效。因此单文件场景直接取文件名。
+     * @param targetPath 扫描目标（目录或单个文件）
+     * @param file 具体文件
+     * @return 相对的展示路径
+     */
+    private static String displayPathOf(String targetPath, Path file) {
+        String relative = relativize(targetPath, file);
+        return relative.isBlank() ? file.getFileName().toString() : relative;
     }
 
     /**
@@ -541,15 +581,18 @@ public class ScanService {
     /**
      * 过滤仓库在线返回的文件路径
      * <p>
-     * 只保留 .java、按忽略 glob 跳过 target/generated 等目录，去重排序后卡数量上限。
+     * 只保留受支持的文件类型、按忽略 glob 跳过 node_modules、dist 等目录，去重排序后卡数量上限。
      * 超出上限直接失败而不是静默截断——少扫的文件没人会发现，宁可不扫也不能扫一半。
      * 抽成静态方法以便脱离 Spring 单测。
+     * <p>
+     * 类型判定集中在这里：{@code GitHubRepoClient} 只负责如实返回仓库里的全部文件路径，
+     * 「什么值得扫」这条规则只有一处定义。
      * @param paths 仓库相对路径（来自 trees / compare 接口）
      * @param config 规则配置，提供忽略 glob
      * @param maxFiles 文件数上限（cq.repo.max-files）
      * @return 过滤后的路径，已去重并按字典序排序
      */
-    static List<String> filterJavaPaths(List<String> paths, RuleConfigSet config, int maxFiles) {
+    static List<String> filterSourcePaths(List<String> paths, RuleConfigSet config, int maxFiles) {
         TreeSet<String> result = new TreeSet<>();
         if (paths != null) {
             for (String raw : paths) {
@@ -557,15 +600,15 @@ public class ScanService {
                     continue;
                 }
                 String path = raw.replace('\\', '/').strip();
-                if (!path.endsWith(".java") || isIgnoredRelative(path, config)) {
+                if (!isSupportedSource(path) || isIgnoredRelative(path, config)) {
                     continue;
                 }
                 result.add(path);
             }
         }
         if (result.size() > maxFiles) {
-            throw new IllegalArgumentException("仓库 .java 文件数 " + result.size() + " 超过上限 " + maxFiles
-                    + "，可在配置中调大 cq.repo.max-files 后重试");
+            throw new IllegalArgumentException("仓库可分析文件数 " + result.size() + " 超过上限 " + maxFiles
+                    + "，可在配置中调大 cq.repo.max-files 后重试（默认忽略 node_modules、dist 等目录）");
         }
         return new ArrayList<>(result);
     }
@@ -654,27 +697,43 @@ public class ScanService {
     }
 
     /**
-     * 收集目标目录下的 Java 文件
+     * 收集目标目录下可分析的文件
      * <p>
-     * 按配置的忽略 glob 跳过 target、generated 等目录。
+     * 按配置的忽略 glob 跳过 target、generated、node_modules 等目录；类型由
+     * {@link Language#of(String)} 判定，识别不出的扩展名（二进制、图片、构建产物）
+     * 一律跳过，因此不需要再做内容嗅探。
+     * @param targetPath 目录或单个文件
+     * @param config 规则配置，提供忽略 glob
+     * @return 待分析文件，按路径排序
      */
-    private List<Path> collectJavaFiles(String targetPath, RuleConfigSet config) throws IOException {
+    private List<Path> collectSourceFiles(String targetPath, RuleConfigSet config) throws IOException {
         Path root = Paths.get(targetPath);
         if (!Files.exists(root)) {
             throw new IllegalArgumentException("扫描路径不存在: " + targetPath);
         }
         if (Files.isRegularFile(root)) {
+            // 显式指定的单个文件也要过类型判定：否则一个 .yml 会被交给 Java 解析器，
+            // 得到满屏的语法错误而不是它本该命中的文本规则
+            if (!isSupportedSource(root.getFileName().toString())) {
+                throw new IllegalArgumentException("不支持的文件类型: " + root.getFileName()
+                        + "，仅支持 " + SUPPORTED_EXTENSIONS_HINT);
+            }
             return List.of(root);
         }
         List<Path> files = new ArrayList<>();
         try (Stream<Path> paths = Files.walk(root)) {
             paths.filter(Files::isRegularFile)
-                    .filter(path -> path.toString().endsWith(".java"))
+                    .filter(path -> isSupportedSource(path.getFileName().toString()))
                     .filter(path -> !isIgnored(root, path, config))
                     .sorted(Comparator.comparing(Path::toString))
                     .forEach(files::add);
         }
         return files;
+    }
+
+    /** 文件是否属于受支持的源码/配置类型 */
+    private static boolean isSupportedSource(String fileName) {
+        return Language.of(fileName).isScannable();
     }
 
     private static boolean isIgnored(Path root, Path file, RuleConfigSet config) {

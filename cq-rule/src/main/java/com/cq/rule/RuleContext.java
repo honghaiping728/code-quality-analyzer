@@ -1,6 +1,7 @@
 package com.cq.rule;
 
 import com.cq.common.Severity;
+import com.cq.common.lang.Language;
 import com.cq.common.model.IgnoreEntry;
 import com.cq.common.model.RuleConfig;
 import com.cq.common.model.RuleConfigSet;
@@ -89,9 +90,30 @@ public class RuleContext {
         return file.getFilePath();
     }
 
+    /** 源码语言，决定哪些规则适用 */
+    public Language language() {
+        return file.getLanguage();
+    }
+
     /** 取指定行源码原文 */
     public String lineAt(int line) {
         return file.lineAt(line);
+    }
+
+    /**
+     * 全部源码行，第 n 行对应 {@code get(n - 1)}
+     * <p>
+     * 基于行扫描的规则应当遍历本方法而不是逐行调用 {@link #lineAt(int)}：
+     * 后者按行号取行，循环使用会重复扫描源码。返回值为共享缓存，规则**不得修改**。
+     * @return 按行拆分的源码
+     */
+    public List<String> lines() {
+        return file.lines();
+    }
+
+    /** 源码行数 */
+    public int lineCount() {
+        return file.lineCount();
     }
 
     /** 解析结果 */

@@ -7,8 +7,31 @@
     <parent>
         <groupId>com.cq</groupId>
         <artifactId>code-quality-analyzer</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>2.0.0</version>
     </parent>
     <artifactId>cq-common</artifactId>
     <packaging>jar</packaging>
+
+    <dependencies>
+        <!--
+            本模块其余部分刻意零依赖（POJO 与枚举），只引入测试依赖。
+            版本由 spring-boot-starter-parent 的 junit-bom 统一管理。
+        -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- spring-boot-starter-parent 默认绑定旧版 surefire，需显式升级才能跑 JUnit 5 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.2</version>
+            </plugin>
+        </plugins>
+    </build>
 </project>

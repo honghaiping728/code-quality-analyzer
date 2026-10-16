@@ -5,6 +5,7 @@ import com.cq.common.IssueType;
 import com.cq.common.Severity;
 import com.cq.parser.AstScopeUtils;
 import com.cq.rule.AbstractRule;
+import com.cq.rule.CredentialPatterns;
 import com.cq.rule.Rule;
 import com.cq.rule.RuleContext;
 import com.github.javaparser.ast.Node;
@@ -49,15 +50,6 @@ public final class SecurityRules {
                 new SensitiveLogRule(),
                 new EcbModeRule());
     }
-
-    /** 疑似凭证的变量名 */
-    private static final Pattern CREDENTIAL_NAME = Pattern.compile(
-            "(?i).*(password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|credential|private[_-]?key).*");
-
-    /** 明文凭证的占位值，不应报告 */
-    private static final List<String> PLACEHOLDER_VALUES = List.of(
-            "", "test", "changeme", "todo", "xxx", "your_password", "password",
-            "example", "placeholder", "123456");
 
     /** 日志方法名 */
     private static final List<String> LOG_METHODS = List.of(
@@ -144,11 +136,11 @@ public final class SecurityRules {
             List<Issue> issues = new ArrayList<>();
             for (VariableDeclarator variable : ctx.findAll(VariableDeclarator.class)) {
                 String name = variable.getNameAsString();
-                if (!CREDENTIAL_NAME.matcher(name).matches()) {
+                if (!CredentialPatterns.CREDENTIAL_NAME.matcher(name).matches()) {
                     continue;
                 }
                 String literal = stringLiteralOf(variable.getInitializer().orElse(null));
-                if (literal == null || isPlaceholder(literal)) {
+                if (literal == null || CredentialPatterns.isPlaceholder(literal)) {
                     continue;
                 }
                 issues.add(issue(ctx, variable,
@@ -159,14 +151,14 @@ public final class SecurityRules {
             for (MethodCallExpr call : ctx.findAll(MethodCallExpr.class)) {
                 String methodName = call.getNameAsString();
                 if (!methodName.toLowerCase(Locale.ROOT).startsWith("set")
-                        || !CREDENTIAL_NAME.matcher(methodName).matches()) {
+                        || !CredentialPatterns.CREDENTIAL_NAME.matcher(methodName).matches()) {
                     continue;
                 }
                 if (call.getArguments().size() != 1) {
                     continue;
                 }
                 String literal = stringLiteralOf(call.getArgument(0));
-                if (literal == null || isPlaceholder(literal)) {
+                if (literal == null || CredentialPatterns.isPlaceholder(literal)) {
                     continue;
                 }
                 issues.add(issue(ctx, call,
@@ -182,15 +174,6 @@ public final class SecurityRules {
                 return value.length() >= 4 ? value : null;   // 过短的常量多为占位
             }
             return null;
-        }
-
-        private static boolean isPlaceholder(String value) {
-            String normalized = value.trim().toLowerCase(Locale.ROOT);
-            if (PLACEHOLDER_VALUES.contains(normalized)) {
-                return true;
-            }
-            // ${...} 或 #{} 形式的占位符
-            return normalized.startsWith("${") || normalized.startsWith("#{");
         }
     }
 

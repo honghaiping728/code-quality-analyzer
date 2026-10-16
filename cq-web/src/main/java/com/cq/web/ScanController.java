@@ -1,6 +1,7 @@
 package com.cq.web;
 
 import com.cq.common.Result;
+import com.cq.common.lang.Language;
 import com.cq.common.model.ScanFile;
 import com.cq.common.model.ScanTask;
 import com.cq.report.ReportService;
@@ -23,7 +24,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * 扫描任务接口
@@ -56,8 +56,9 @@ public class ScanController {
     /**
      * 上传本地文件审查
      * <p>
-     * 文件内容只在内存中解析，不落盘。只接受 .java 文件 —— 本分析器目前仅支持 Java，
-     * 放行其他类型只会得到一堆解析错误，反而让人误以为分析失败。
+     * 文件内容只在内存中解析，不落盘。接受类型按扩展名判定，覆盖 Java、各类配置与脚本、
+     * 前端源码等；识别不出的类型（二进制、图片、jar 包等）直接拒绝并列名，
+     * 而不是放行后产生一堆解析错误让人误以为分析失败。
      * @param files 上传的文件
      * @return 已创建的任务
      */
@@ -71,7 +72,7 @@ public class ScanController {
         List<String> rejected = new ArrayList<>();
         for (MultipartFile file : files) {
             String name = displayNameOf(file);
-            if (!name.toLowerCase(Locale.ROOT).endsWith(".java")) {
+            if (!Language.of(name).isScannable()) {
                 rejected.add(name);
                 continue;
             }
@@ -84,20 +85,24 @@ public class ScanController {
             units.add(new SourceUnit(name, content));
         }
         if (units.isEmpty()) {
-            return Result.error("只支持 .java 文件，以下文件已跳过: " + String.join("、", rejected));
+            return Result.error("不支持的文件类型，以下文件已跳过: " + String.join("、", rejected)
+                    + "。支持的类型：" + ScanService.SUPPORTED_EXTENSIONS_HINT);
         }
         String display = units.size() == 1
                 ? units.get(0).displayPath()
                 : units.size() + " 个上传文件";
         StringBuilder note = new StringBuilder();
         if (!rejected.isEmpty()) {
-            note.append("已跳过非 Java 文件: ").append(String.join("、", rejected));
+            note.append("已跳过不支持的文件: ").append(String.join("、", rejected));
         }
         return Result.success(scanService.submitSources(display, "UPLOAD", units), note.toString());
     }
 
     /**
      * 粘贴代码审查
+     * <p>
+     * 语言按文件名的扩展名判定，因此文件名对结果有实际影响：叫 {@code config.yml}
+     * 就按 YAML 检查，叫 {@code Demo.java} 就按 Java 解析。
      * @param request 含 source 的请求体
      * @return 已创建的任务
      */
@@ -106,15 +111,38 @@ public class ScanController {
         if (request.getSource() == null || request.getSource().isBlank()) {
             return Result.error("请粘贴要审查的代码");
         }
-        String fileName = (request.getFileName() == null || request.getFileName().isBlank())
-                ? "粘贴的代码.java"
-                : request.getFileName().trim();
         try {
+            String fileName = resolveSnippetName(request.getFileName());
             return Result.success(scanService.submitSources(
                     fileName, "SNIPPET", List.of(new SourceUnit(fileName, request.getSource()))));
         } catch (IllegalArgumentException e) {
             return Result.error(e.getMessage());
         }
+    }
+
+    /**
+     * 解析粘贴代码的文件名
+     * <p>
+     * 三种情况：留空 → 按历史上唯一支持的 Java 处理；只有文件名没有扩展名（如直接写
+     * {@code MyClass}）→ 同样按 Java 处理，这是使用者的默认预期；带扩展名但不是受支持
+     * 类型 → 明确报错，而不是静默地一个规则都不跑。
+     * @param raw 请求中的文件名，可为 null
+     * @return 可用的文件名
+     */
+    private static String resolveSnippetName(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "粘贴的代码.java";
+        }
+        String name = raw.trim();
+        Language language = Language.of(name);
+        if (language.isScannable()) {
+            return name;
+        }
+        if (name.indexOf('.') < 0) {
+            return name + ".java";   // 只给了名字，按 Java 源码处理
+        }
+        throw new IllegalArgumentException("不支持的文件类型: " + name
+                + "。支持的类型：" + ScanService.SUPPORTED_EXTENSIONS_HINT);
     }
 
     /**

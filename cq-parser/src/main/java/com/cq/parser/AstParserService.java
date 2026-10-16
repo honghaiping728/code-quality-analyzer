@@ -6,6 +6,7 @@ import com.cq.common.ast.ClassInfo;
 import com.cq.common.ast.MethodCall;
 import com.cq.common.ast.MethodInfo;
 import com.cq.common.ast.ParamInfo;
+import com.cq.common.lang.Language;
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParseResult;
 import com.github.javaparser.ParseStart;
@@ -161,6 +162,7 @@ public class AstParserService {
 
     private ParsedFile buildParsedFile(String source, ParseResult<CompilationUnit> result, String filePath) {
         ParsedFile parsed = new ParsedFile();
+        parsed.setLanguage(Language.JAVA);   // 本服务只解析 Java，显式声明以免依赖字段默认值
         parsed.setSummary(buildSummary(result, filePath));
         parsed.setSource(source);
         parsed.setFilePath(filePath);

@@ -14,7 +14,7 @@
 ## 前置条件
 
 1. **一个已启动的 cq-web**（默认 `http://127.0.0.1:8080`）。没起的话 Playwright
-   会自己用 `java -jar cq-web/target/cq-web-0.1.0-SNAPSHOT.jar` 拉起来
+   会自己用 `java -jar cq-web/target/cq-web-2.0.0.jar` 拉起来
    （`reuseExistingServer` 已开，本地通常自己起着更好）。
 2. **Chromium**：`npm run install-browser`（等价于 `playwright install --with-deps chromium`，
    会一并安装 libgbm 等系统库）。
@@ -52,7 +52,7 @@ npm run shots        # 截图到 shots/，亮/暗两套 × 每个视图
 ## 覆盖范围
 
 - 页面骨架：五个页签、概览默认激活、状态栏与主题按钮
-- 概览：四种来源齐全、面板切换、上传表单的 `.java` 限制与多选、仓库增量模式的提交范围显隐、最近任务表
+- 概览：四种来源齐全、面板切换、上传表单的类型过滤与多选、仓库增量模式的提交范围显隐、最近任务表
 - **扫描全流程回归**：粘贴代码 → 轮询 → 自动跳转 → 列表聚焦本次任务（且不混入其他任务）
 - 问题列表：分页（默认 20 条、翻页内容变化）、关键词过滤与 URL 同步
 - 问题详情：从列表进入、返回

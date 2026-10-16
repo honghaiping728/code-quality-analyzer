@@ -42,14 +42,16 @@ mybatis-plus:
 # 两处都没有密钥时系统退化为离线启发式实现，扫描、建议、报告链路仍可完整运行。
 #
 #   export LLM_API_KEY=sk-xxxx
-#   java -jar cq-web/target/cq-web-0.1.0-SNAPSHOT.jar
+#   java -jar cq-web/target/cq-web-2.0.0.jar
 #
 cq:
   repo:
     # GitHub API token（可选）。留空为未认证访问，api.github.com 限流 60 次/小时；
     # 配置 token 后提升为 5000 次/小时。**不要**把令牌写进本文件：本仓库是公开的。
     github-token: ${CQ_GITHUB_TOKEN:}
-    # 单次仓库扫描允许的 .java 文件数上限，超出直接失败而不是静默截断
+    # 单次仓库扫描允许的分析文件数上限，超出直接失败而不是静默截断。
+    # 支持多文件类型后纳入统计的文件变多，构建产物目录（node_modules、dist 等）
+    # 已由 ignoredFilePatterns 默认忽略，必要时可在此调大。
     max-files: ${CQ_REPO_MAX_FILES:1000}
     # 单次 API 请求的连接/读取超时（秒）
     api-timeout-seconds: ${CQ_REPO_API_TIMEOUT:30}

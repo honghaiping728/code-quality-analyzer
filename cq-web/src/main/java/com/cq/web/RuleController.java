@@ -4,6 +4,7 @@ import com.cq.admin.RuleConfigService;
 import com.cq.common.Result;
 import com.cq.common.model.IgnoreEntry;
 import com.cq.common.model.RuleConfig;
+import com.cq.common.model.RuleConfigView;
 import com.cq.common.model.RuleThreshold;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -35,7 +36,7 @@ public class RuleController {
      * @return 规则配置列表
      */
     @GetMapping
-    public Result<List<RuleConfig>> list() {
+    public Result<List<RuleConfigView>> list() {
         return Result.success(ruleConfigService.listRules());
     }
 

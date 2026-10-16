@@ -368,6 +368,7 @@ INSERT INTO `rule_threshold` (`config_key`, `config_value`, `value_type`, `descr
     ('maxNestingDepth',             '3',     'INT',    '最大嵌套深度，超出触发 STYLE.DEEP_NESTING（else if 不计入）'),
     ('minFieldNameLength',          '2',     'INT',    '字段最小名字长度'),
     ('maxFindingsPerRulePerFile',   '100',   'INT',    '单文件单规则命中数上限，防止生成代码刷屏'),
+    ('maxLineLength',               '120',   'INT',    '单行最大长度，超出触发 STYLE.LINE_TOO_LONG'),
     ('constantNameAllowlist',       'log,logger,serialVersionUID', 'LIST', '常量命名规则白名单'),
     ('shortNameAllowlist',          'i,j,k,x,y,z,e,t,id',          'LIST', '短变量名白名单'),
     ('magicNumberAllowlist',        '0,1,2,-1,10,100,1000',        'LIST', '魔法数字白名单'),
@@ -375,7 +376,7 @@ INSERT INTO `rule_threshold` (`config_key`, `config_value`, `value_type`, `descr
     ('methodNamingPattern',         '^[a-z][A-Za-z0-9]*$',         'STRING', '方法名命名规范'),
     ('constantNamingPattern',       '^[A-Z][A-Z0-9_]*$',           'STRING', '常量命名规范'),
     ('requireJavadocForPublicMethods', 'true', 'BOOLEAN', 'public 方法是否要求 Javadoc'),
-    ('ignoredFilePatterns',         '**/target/**,**/generated/**,**/*.pb.java', 'LIST', '默认忽略的路径');
+    ('ignoredFilePatterns',         '**/target/**,**/generated/**,**/*.pb.java,**/node_modules/**,**/dist/**,**/build/**,**/*.min.js,**/*.min.css,**/package-lock.json,**/yarn.lock,**/pnpm-lock.yaml', 'LIST', '默认忽略的路径');
 
 -- =============================================================================
 -- 初始数据：管理员账号（口令为 bcrypt 哈希，请在首次登录后立即修改）

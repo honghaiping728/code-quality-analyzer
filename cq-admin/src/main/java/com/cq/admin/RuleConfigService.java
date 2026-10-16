@@ -8,6 +8,7 @@ import com.cq.common.model.IgnoreEntry;
 import com.cq.common.model.RuleConfig;
 import com.cq.common.model.RuleConfigProvider;
 import com.cq.common.model.RuleConfigSet;
+import com.cq.common.model.RuleConfigView;
 import com.cq.common.model.RuleThreshold;
 import com.cq.common.model.RuleThresholds;
 import com.cq.rule.DefaultRules;
@@ -121,6 +122,7 @@ public class RuleConfigService implements RuleConfigProvider {
                 case "minFieldNameLength" -> thresholds.setMinFieldNameLength(Integer.parseInt(value));
                 case "maxFindingsPerRulePerFile" ->
                         thresholds.setMaxFindingsPerRulePerFile(Integer.parseInt(value));
+                case "maxLineLength" -> thresholds.setMaxLineLength(Integer.parseInt(value));
                 case "requireJavadocForPublicMethods" ->
                         thresholds.setRequireJavadocForPublicMethods(Boolean.parseBoolean(value));
                 case "classNamingPattern" -> thresholds.setClassNamingPattern(value);
@@ -155,9 +157,13 @@ public class RuleConfigService implements RuleConfigProvider {
      * <p>
      * 以内置规则为准遍历，再合并数据库中的覆盖项，保证新加规则立刻出现在
      * 管理页面上，而不需要先往配置表插一行。
+     * <p>
+     * 返回的是 {@link RuleConfigView} 而非实体 {@link RuleConfig}：视图多一个
+     * 「适用语言」字段，该字段不属于 rule_config 表，混进实体会让 MyBatis-Plus
+     * 拼出错误的 SQL，详见 {@link RuleConfigView} 的说明。
      * @return 规则配置列表
      */
-    public List<RuleConfig> listRules() {
+    public List<RuleConfigView> listRules() {
         Map<String, RuleConfig> stored = new HashMap<>();
         try {
             for (RuleConfig ruleConfig : ruleConfigMapper.selectList(null)) {
@@ -166,11 +172,12 @@ public class RuleConfigService implements RuleConfigProvider {
         } catch (RuntimeException e) {
             log.warn("读取规则配置失败: {}", e.toString());
         }
-        List<RuleConfig> result = new ArrayList<>();
+        List<RuleConfigView> result = new ArrayList<>();
         for (Rule rule : DefaultRules.all()) {
             RuleConfig storedConfig = stored.get(rule.id());
-            RuleConfig view = new RuleConfig(rule.id(), rule.name(), rule.type().name());
+            RuleConfigView view = new RuleConfigView(rule.id(), rule.name(), rule.type().name());
             view.setDescription(rule.description());
+            view.setLanguages(rule.languages().stream().map(Enum::name).sorted().toList());
             if (storedConfig != null) {
                 view.setEnabled(storedConfig.isEnabled());
                 view.setSeverity(storedConfig.getSeverity());

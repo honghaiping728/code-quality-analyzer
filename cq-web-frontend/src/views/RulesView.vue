@@ -19,6 +19,18 @@ const adding = ref(false);
 
 const ignoreForm = reactive({ ruleId: '', filePattern: '', reason: '' });
 
+/**
+ * 适用语言的展示文本
+ * <p>
+ * 覆盖全部可扫描语言的规则逐条列出会撑满整列，也没有信息量，直接写明「全部文本文件」。
+ */
+function languageSummary(languages) {
+    if (!languages || !languages.length) {
+        return '—';
+    }
+    return languages.length > 5 ? `全部文本文件（${languages.length} 种）` : languages.join(' · ');
+}
+
 async function loadRules() {
     loading.rules = true;
     failed.rules = '';
@@ -148,6 +160,11 @@ onMounted(() => {
                 <el-table-column label="维度" width="100">
                     <template #default="{ row }"><TypeDot :type="row.category" /></template>
                 </el-table-column>
+                <el-table-column label="适用语言" min-width="160">
+                    <template #default="{ row }">
+                        <span class="mono lang">{{ languageSummary(row.languages) }}</span>
+                    </template>
+                </el-table-column>
                 <el-table-column label="严重级" width="100">
                     <template #default="{ row }">
                         <span v-if="row.severity" class="badge">{{ row.severity }}</span>
@@ -243,4 +260,7 @@ onMounted(() => {
 .threshold-input { max-width: 240px; }
 
 .toolbar { margin-top: var(--sp-4); }
+
+/* 适用语言是一串枚举名，字号收一档避免抢走名称列的注意力 */
+.lang { font-size: 12px; color: var(--text-muted); }
 </style>

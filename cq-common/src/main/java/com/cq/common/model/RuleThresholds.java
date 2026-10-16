@@ -22,6 +22,7 @@ public class RuleThresholds implements Serializable {
     private int maxNestingDepth = 3;                // 最大嵌套深度（else if 不计入）
     private int minFieldNameLength = 2;             // 字段最小名字长度
     private int maxFindingsPerRulePerFile = 100;    // 单文件单规则命中数上限
+    private int maxLineLength = 120;                // 单行最大长度（STYLE.LINE_TOO_LONG）
     private boolean requireJavadocForPublicMethods = true;
 
     private String classNamingPattern = "^[A-Z][A-Za-z0-9]*$";
@@ -31,7 +32,20 @@ public class RuleThresholds implements Serializable {
     private List<String> constantNameAllowlist = new ArrayList<>(List.of("log", "logger", "serialVersionUID"));
     private List<String> shortNameAllowlist = new ArrayList<>(List.of("i", "j", "k", "x", "y", "z", "e", "t", "id"));
     private List<String> magicNumberAllowlist = new ArrayList<>(List.of("0", "1", "2", "-1", "10", "100", "1000"));
-    private List<String> ignoredFilePatterns = new ArrayList<>(List.of("**/target/**", "**/generated/**"));
+    /**
+     * 默认忽略的路径
+     * <p>
+     * 必须与 {@code docs/sql/schema.sql} 里的种子值保持一致：两者分别对应
+     * 「数据库不可用时的兜底」与「正常启动」，不一致会让同一份代码在不同环境下扫出不同结果。
+     * <p>
+     * 放开文件类型后这份名单变得关键 —— 构建产物目录里的文件数量远超源码，
+     * 不排除会让仓库扫描的文件数上限瞬间被打满。
+     */
+    private List<String> ignoredFilePatterns = new ArrayList<>(List.of(
+            "**/target/**", "**/generated/**", "**/*.pb.java",
+            "**/node_modules/**", "**/dist/**", "**/build/**",
+            "**/*.min.js", "**/*.min.css",
+            "**/package-lock.json", "**/yarn.lock", "**/pnpm-lock.yaml"));
 
     public RuleThresholds() {}
 
@@ -55,6 +69,9 @@ public class RuleThresholds implements Serializable {
 
     public int getMaxFindingsPerRulePerFile() { return maxFindingsPerRulePerFile; }
     public void setMaxFindingsPerRulePerFile(int maxFindingsPerRulePerFile) { this.maxFindingsPerRulePerFile = maxFindingsPerRulePerFile; }
+
+    public int getMaxLineLength() { return maxLineLength; }
+    public void setMaxLineLength(int maxLineLength) { this.maxLineLength = maxLineLength; }
 
     public boolean isRequireJavadocForPublicMethods() { return requireJavadocForPublicMethods; }
     public void setRequireJavadocForPublicMethods(boolean requireJavadocForPublicMethods) { this.requireJavadocForPublicMethods = requireJavadocForPublicMethods; }

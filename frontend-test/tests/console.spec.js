@@ -52,10 +52,14 @@ test.describe('概览', () => {
         }
     });
 
-    test('上传表单只接受 .java 且支持多选', async ({ page }) => {
+    test('上传表单接受多种文件类型且支持多选', async ({ page }) => {
         await page.locator('.source-tab[data-source="upload"]').click();
         const input = page.getByTestId('upload-files');
-        await expect(input).toHaveAttribute('accept', '.java');
+        const accept = (await input.getAttribute('accept')) ?? '';
+        // 不再只收 .java：放开文件类型后，配置与脚本类扩展名也必须在列
+        for (const extension of ['.java', '.yml', '.json', '.sql', '.vue', '.py']) {
+            expect(accept).toContain(extension);
+        }
         await expect(input).toHaveAttribute('multiple', '');
     });
 
@@ -98,6 +102,31 @@ test.describe('扫描链路', () => {
         const taskId = new URL(page.url()).searchParams.get('task');
         await expect(page.getByTestId('filter-task')).toContainText(`#${taskId}`);
         await expect(page.getByTestId('issue-table')).not.toContainText('BadCode.java');
+    });
+
+    test('粘贴非 Java 内容（YAML）也能被分析出问题', async ({ page }) => {
+        await page.locator('.source-tab[data-source="snippet"]').click();
+        // 语言由扩展名决定：同一段文本叫 .yml 就走配置类规则，不再交给 Java 解析器
+        await page.getByTestId('snippet-name').fill('application.yml');
+        await page.getByTestId('snippet-source').fill(
+            'spring:\n  datasource:\n    password: Pr0ductionP@ss\n',
+        );
+        await page.getByTestId('snippet-button').click();
+
+        await page.waitForURL(/\/issues/, { timeout: 45_000 });
+        await expect(page.getByTestId('issue-table')).toContainText('application.yml');
+        await expect(page.getByTestId('issue-table')).toContainText('SEC.CONFIG_PLAINTEXT_SECRET');
+    });
+
+    test('不支持的文件类型会被明确拒绝而不是静默无结果', async ({ page }) => {
+        await page.locator('.source-tab[data-source="snippet"]').click();
+        await page.getByTestId('snippet-name').fill('archive.zip');
+        await page.getByTestId('snippet-source').fill('not really a zip');
+        await page.getByTestId('snippet-button').click();
+
+        // 留在概览页而不是跳转到问题列表，说明任务没有被创建
+        await expect(page.getByTestId('toast').first()).toContainText('不支持的文件类型');
+        await expect(page).toHaveURL(/\/$/);
     });
 });
 

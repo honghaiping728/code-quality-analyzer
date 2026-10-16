@@ -3,8 +3,10 @@ package com.cq.rule;
 import com.cq.common.Issue;
 import com.cq.common.IssueType;
 import com.cq.common.Severity;
+import com.cq.common.lang.Language;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * 代码检查规则
@@ -37,6 +39,22 @@ public interface Rule {
 
     /** 规则说明，用于规则配置页展示 */
     String description();
+
+    /**
+     * 本规则适用的语言
+     * <p>
+     * 默认只作用于 Java：既有 42 条规则全部建立在 JavaParser 的 AST 之上，
+     * 其判据（{@code MethodDeclaration}、{@code TryStmt}……）在别的语言里没有对应物。
+     * 基于行扫描的规则则应显式声明范围 —— 与语言无关的问题（行尾空白、遗留的合并
+     * 冲突标记、明文私钥）用 {@link Language#scannable()} 表示「全部语言」，
+     * 其余按需列举。
+     * <p>
+     * 引擎在检查前按此过滤，因此某条规则即便写错了也不会在不适用的语言上执行。
+     * @return 适用语言集合，不可为 null
+     */
+    default Set<Language> languages() {
+        return Set.of(Language.JAVA);
+    }
 
     /**
      * 执行检查

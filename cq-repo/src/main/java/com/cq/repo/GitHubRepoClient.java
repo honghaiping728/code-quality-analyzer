@@ -192,12 +192,16 @@ public class GitHubRepoClient {
     }
 
     /**
-     * 指定提交下全部 .java 文件路径
+     * 指定提交下的全部文件路径
+     * <p>
+     * 如实返回仓库树里的所有 blob，**不按文件类型过滤**：类型判定与忽略规则
+     * 统一由 {@code ScanService} 负责，避免同一个「什么值得扫」的规则散落在两处、
+     * 改一处漏一处。
      * @param ref 仓库坐标
      * @param sha 提交 SHA
      * @return 仓库相对路径列表
      */
-    public List<String> javaPathsAt(RepoRef ref, String sha) {
+    public List<String> pathsAt(RepoRef ref, String sha) {
         JsonNode json = getJson("/repos/" + ref.owner() + "/" + ref.repo()
                 + "/git/trees/" + encodeSegment(sha) + "?recursive=1");
         if (json.path("truncated").asBoolean(false)) {
@@ -208,22 +212,19 @@ public class GitHubRepoClient {
             if (!"blob".equals(node.path("type").asText())) {
                 continue;
             }
-            String path = node.path("path").asText("");
-            if (path.endsWith(".java")) {
-                paths.add(path);
-            }
+            paths.add(node.path("path").asText(""));
         }
         return paths;
     }
 
     /**
-     * 两次提交之间变更（新增 / 修改 / 重命名 / 复制）的 .java 文件路径
+     * 两次提交之间变更（新增 / 修改 / 重命名 / 复制）的文件路径
      * @param ref 仓库坐标
      * @param baseSha 基线提交 SHA
      * @param headSha 目标提交 SHA
      * @return 仓库相对路径列表（重命名的取新路径，删除的除外）
      */
-    public List<String> changedJavaPaths(RepoRef ref, String baseSha, String headSha) {
+    public List<String> changedPaths(RepoRef ref, String baseSha, String headSha) {
         JsonNode json = getJson("/repos/" + ref.owner() + "/" + ref.repo()
                 + "/compare/" + encodeSegment(baseSha) + "..." + encodeSegment(headSha));
         List<String> paths = new ArrayList<>();
@@ -231,10 +232,7 @@ public class GitHubRepoClient {
             if ("removed".equals(file.path("status").asText())) {
                 continue;   // 被删除的文件没有可分析的正文
             }
-            String path = file.path("filename").asText("");
-            if (path.endsWith(".java")) {
-                paths.add(path);
-            }
+            paths.add(file.path("filename").asText(""));
         }
         return paths;
     }

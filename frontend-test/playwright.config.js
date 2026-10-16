@@ -54,7 +54,7 @@ export default defineConfig({
      * 设成 false 会因为 8080 已被占用而直接报错。
      */
     webServer: {
-        command: 'java -jar cq-web/target/cq-web-0.1.0-SNAPSHOT.jar',
+        command: 'java -jar cq-web/target/cq-web-2.0.0.jar',
         cwd: '..',
         url: readyUrl,
         reuseExistingServer: true,
